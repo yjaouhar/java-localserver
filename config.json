@@ -1,95 +1,95 @@
 {
-  "timeouts": {
-    "header_ms": 10000,
-    "body_ms": 30000,
-    "idle_keep_alive_ms": 60000
-  },
-  "limits": {
-    "max_header_bytes": 16384
-  },
-  "servers": [
-    {
-      "name": "main",
-      "host": "127.0.0.1",
-      "ports": [
-        8080,
-        8081
-      ],
-      "default_server": true,
-      "client_max_body_size": 1000000,
-      "error_pages": {
-        "400": "error_pages/400.html",
-        "403": "error_pages/403.html",
-        "404": "error_pages/404.html",
-        "405": "error_pages/405.html",
-        "413": "error_pages/413.html",
-        "500": "error_pages/500.html"
-      },
-      "routes": [
-        {
-          "path": "/",
-          "root": "www/html",
-          "methods": [
-            "GET"
-          ],
-          "index": "index.html",
-          "directory_listing": false
-        },
-        {
-          "path": "/upload",
-          "root": "www/uploads",
-          "methods": [
-            "POST"
-          ],
-          "upload_dir": "www/uploads"
-        },
-        {
-          "path": "/delete",
-          "root": "www/uploads",
-          "methods": [
-            "DELETE"
-          ]
-        },
-        {
-          "path": "/cgi-bin",
-          "root": "www/cgi-bin",
-          "methods": [
-            "GET",
-            "POST"
-          ],
-          "cgi": {
-            "extension": ".py",
-            "interpreter": "python3"
-          }
-        },
-        {
-          "path": "/old",
-          "redirect": {
-            "code": 301,
-            "location": "/"
-          }
-        }
-      ]
+    "timeouts": {
+        "header_ms": 10000,
+        "body_ms": 30000,
+        "idle_keep_alive_ms": 60000
     },
-    {
-      "name": "admin",
-      "host": "127.0.0.1",
-      "ports": [
-        9090
-      ],
-      "default_server": false,
-      "client_max_body_size": 500000,
-      "routes": [
+    "limits": {
+        "max_header_bytes": 16384
+    },
+    "servers": [
         {
-          "path": "/",
-          "root": "www/admin",
-          "methods": [
-            "GET"
-          ],
-          "index": "dashboard.html",
-          "directory_listing": true
+            "name": "main",
+            "host": "127.0.0.1",
+            "ports": [
+                8080,
+                8081
+            ],
+            "default_server": true,
+            "client_max_body_size": 1000000,
+            "error_pages": {
+                "400": "error_pages/400.html",
+                "403": "error_pages/403.html",
+                "404": "error_pages/404.html",
+                "405": "error_pages/405.html",
+                "413": "error_pages/413.html",
+                "500": "error_pages/500.html"
+            },
+            "routes": [
+                {
+                    "path": "/",
+                    "root": "www/html",
+                    "methods": [
+                        "GET"
+                    ],
+                    "index": "index.html",
+                    "directory_listing": false
+                },
+                {
+                    "path": "/upload",
+                    "root": "www/uploads",
+                    "methods": [
+                        "POST"
+                    ],
+                    "upload_dir": "www/uploads"
+                },
+                {
+                    "path": "/delete",
+                    "root": "www/uploads",
+                    "methods": [
+                        "DELETE"
+                    ]
+                },
+                {
+                    "path": "/cgi-bin",
+                    "root": "www/cgi-bin",
+                    "methods": [
+                        "GET",
+                        "POST"
+                    ],
+                    "cgi": {
+                        "extension": ".py",
+                        "interpreter": "python3"
+                    }
+                },
+                {
+                    "path": "/old",
+                    "redirect": {
+                        "code": 301,
+                        "location": "/"
+                    }
+                }
+            ]
+        },
+        {
+            "name": "admin",
+            "host": "127.0.0.1",
+            "ports": [
+                9090
+            ],
+            "default_server": false,
+            "client_max_body_size": 500000,
+            "routes": [
+                {
+                    "path": "/",
+                    "root": "www/admin",
+                    "methods": [
+                        "GET"
+                    ],
+                    "index": "dashboard.html",
+                    "directory_listing": true
+                }
+            ]
         }
-      ]
-    }
-  ]
+    ]
 }
