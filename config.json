@@ -36,7 +36,7 @@
                     "upload_dir": "www/uploads"
                 },
                 {
-                    "path": "/delete",
+                    "path":"/delete",
                     "root": "www/uploads",
                     "methods": [
                         "DELETE"
