@@ -1,5 +1,6 @@
 package handlers;
 
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -12,7 +13,7 @@ import java.util.Map;
 
 public class UploadHandler {
 
-    public static int handleUpload(HttpRequest request) throws Exception {
+    public static int handleUpload(HttpRequest request) {
         if (request == null) {
             return 400;
         }
@@ -55,13 +56,17 @@ public class UploadHandler {
                 }
                 byte[] fileData = bodyPart.getBytes(StandardCharsets.ISO_8859_1);
                 Path uploadDir = Paths.get("uploads");
+                try {
+                    if (!Files.exists(uploadDir)) {
+                        Files.createDirectories(uploadDir);
+                    }
 
-                if (!Files.exists(uploadDir)) {
-                    Files.createDirectories(uploadDir);
+                    Files.write(uploadDir.resolve(fileName), fileData);
+                    uploaded = true;
+
+                } catch (IOException e) {
+                    return 500;
                 }
-
-                Files.write(uploadDir.resolve(fileName), fileData);
-                uploaded = true;
 
             }
         }
