@@ -1,6 +1,4 @@
 package session;
-
-
 import java.security.SecureRandom;
 
 public class Session {
