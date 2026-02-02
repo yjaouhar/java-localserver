@@ -1,18 +1,26 @@
 package session;
-import java.security.SecureRandom;
+
+import java.time.Instant;
 
 public class Session {
 
-    private static final SecureRandom random = new SecureRandom();
+    private String sessionId;
+    private Instant expirationTime;
 
-    public static String generateSessionId() {
-        byte[] bytes = new byte[32];
-        random.nextBytes(bytes);
-        StringBuilder sb = new StringBuilder();
-        for (byte b : bytes) {
-            sb.append(String.format("%02x", b));
-        }
-        System.out.println("====> session id: " + sb.toString());
-        return sb.toString();
+    public Session(String sessionId, long expirationTime) {
+        this.sessionId = sessionId;
+        this.expirationTime = Instant.now().plusSeconds(expirationTime);
+    }
+
+    public String getSessionId() {
+        return this.sessionId;
+    }
+
+    public boolean isExpired() {
+        return Instant.now().isAfter(expirationTime);
+    }
+
+    public void refreshExpiration(Long expirationTime) {
+        this.expirationTime = Instant.now().plusSeconds(expirationTime);
     }
 }

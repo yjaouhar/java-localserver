@@ -35,7 +35,6 @@ public class UploadHandler {
             return 415;
         }
         String body = new String(request.getBody(), StandardCharsets.ISO_8859_1);
-        // String[] parts = body.split("--" + boundary);
         List<String> parts = manualSplit(body, "--" + boundary);
 
         boolean uploaded = false;
