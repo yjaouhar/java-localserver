@@ -5,7 +5,7 @@
             "host": "127.0.0.1",
             "ports": [
                 8080,
-                8081,8081
+                8081,9090
             ],
             "default_server": true,
             "client_max_body_size": 1000000,
@@ -65,7 +65,7 @@
         },
         {
             "name": "admin",
-            "host": "127.0.0.1",
+            "host": "127.0.0.2",
             "ports": [
                 9090
             ],
