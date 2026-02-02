@@ -5,7 +5,6 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.nio.charset.StandardCharsets;
 import java.util.Iterator;
 import java.util.Set;
 
@@ -40,7 +39,6 @@ public class Server {
             Iterator<SelectionKey> it = keys.iterator();
 
             // System.out.println(keys);
-            System.out.println("111111111111");
             while (it.hasNext()) {
                 SelectionKey key = it.next();
                 it.remove();
@@ -50,16 +48,11 @@ public class Server {
                 }
                 //check whether the client is ready to accept a new socket connection
                 if (key.isAcceptable()) {
-                    System.out.println("222222");
                     ServerSocketChannel srv = (ServerSocketChannel) key.channel();
                     SocketChannel client = srv.accept();
                     System.out.println("==" + client.getRemoteAddress());
 
-                    // if (client == null) {
-                    //     continue;
-                    // }
-                    // if(key.isReadable()) {
-                        System.out.println("33333333333");
+       
                         ByteBuffer buffer = ByteBuffer.allocate(1024);
                         int bytesRead = client.read(buffer);
                         System.out.println("lenght dyal l buffer " + bytesRead);
@@ -76,13 +69,7 @@ public class Server {
                             System.out.println("33Headers: " + request.getHeaders());
                             System.out.println("44Body: " + request.getBody());
                         }
-                    // }
-                    // String msg = "Hello from ServerSocketChannel!\n";
-                    // ByteBuffer buffer = ByteBuffer.wrap(msg.getBytes(StandardCharsets.UTF_8));
-
-                    // while (buffer.hasRemaining()) {
-                    //     client.write(buffer);
-                    // }
+             
 
                     client.close();
 

@@ -80,7 +80,12 @@ public final class ConfigLoader {
         // ports
         List<Object> ports = asArray(required(s, "ports", path), path + ".ports");
         for (int i = 0; i < ports.size(); i++) {
-            sc.ports.add(asInt(ports.get(i), path + ".ports[" + i + "]"));
+
+            Integer port = asInt(ports.get(i), path + ".ports[" + i + "]");
+            if (sc.ports.contains(port)) {
+                throw new IllegalArgumentException("Port repeated port" + path);
+            }
+            sc.ports.add(port);
         }
 
         sc.defaultServer = asBoolean(required(s, "default_server", path), path + ".default_server");
@@ -431,8 +436,8 @@ public final class ConfigLoader {
             while (i < s.length()) {
                 char c = s.charAt(i);
                 if (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
-                    i++; 
-                }else {
+                    i++;
+                } else {
                     break;
                 }
             }
