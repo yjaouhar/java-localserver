@@ -453,4 +453,17 @@ public final class ConfigLoader {
             return new IllegalArgumentException(msg + " at index " + i);
         }
     }
+
+    // @Override
+    // public String toString() {
+    //     return "ServerConfig{" +
+    //         "name='" + name + '\'' +
+    //         ", host='" + host + '\'' +
+    //         ", ports=" + ports +
+    //         ", defaultServer=" + defaultServer +
+    //         ", clientMaxBodySize=" + clientMaxBodySize +
+    //         ", errorPages=" + errorPages +
+    //         ", routes=" + routes +
+    //         '}';
+    // }
 }
