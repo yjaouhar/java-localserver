@@ -1,45 +1,33 @@
 package session;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.time.Instant;
 
 public class Cookies {
 
-    public static String generate(String name, String value, int maxAge, String path, boolean httpOnly) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(name).append("=").append(value);
+    private final String name;
+    private final String value;
+    private final Long maxAgeSeconds;
 
-        if (maxAge >= 0) {
-            sb.append("; Max-Age=").append(maxAge);
-        }
-
-        if (path != null && !path.isEmpty()) {
-            sb.append("; Path=").append(path);
-        }
-
-        if (httpOnly) {
-            sb.append("; HttpOnly");
-        }
-        System.out.println("====> cookie string: " + sb.toString());
-        return sb.toString();
+    public Cookies(String name, String value, long maxAgeSeconds) {
+        this.name = name;
+        this.value = value;
+        this.maxAgeSeconds = maxAgeSeconds;
     }
 
-    public static Map<String, String> parse(String cookieHeader) {
-        Map<String, String> cookies = new HashMap<>();
-        if (cookieHeader == null || cookieHeader.isEmpty()) {
-            return cookies;
-        }
-
-        String[] pairs = cookieHeader.split(";");
-        for (String pair : pairs) {
-            pair = pair.trim();
-            int eqIndex = pair.indexOf('=');
-            if (eqIndex > 0) {
-                String name = pair.substring(0, eqIndex).trim();
-                String value = pair.substring(eqIndex + 1).trim();
-                cookies.put(name, value);
-            }
-        }
-        return cookies;
+    public String getName() {
+        return this.name;
     }
+
+    public String getValue() {
+        return this.value;
+    }
+
+    public boolean isExpired(Instant createdAt) {
+        return Instant.now().isAfter(createdAt.plusSeconds(maxAgeSeconds));
+    }
+    public  String generateCookieString() {
+        String cookie = name + "=" + value + "; Max-Age="+ maxAgeSeconds+"; Path=/; HttpOnly";
+        return cookie;
+
+    }   
 }
