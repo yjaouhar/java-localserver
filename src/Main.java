@@ -1,5 +1,5 @@
 
-import utils.AppConfig;
+import utils.json.AppConfig;
 
 public class Main {
 

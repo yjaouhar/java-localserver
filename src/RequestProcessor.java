@@ -1,4 +1,4 @@
-import utils.AppConfig;
+import utils.json.AppConfig;
 
 public class RequestProcessor {
     public static HttpResponse handle(HttpRequest req, AppConfig cfg) {
