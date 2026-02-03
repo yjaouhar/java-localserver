@@ -1,7 +1,5 @@
 
-import java.util.Map;
-
-import utils.AppConfig;
+import utils.json.AppConfig;
 
 public class Main {
 
@@ -47,7 +45,7 @@ public class Main {
         //     }
         // }
 
-        Server server = new Server();
+        Server server = new Server(cfg);
 
     }
 }

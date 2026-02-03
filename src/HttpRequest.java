@@ -42,10 +42,10 @@ public class HttpRequest {
         method = requestLine[0];
         path = requestLine[1];
         version = requestLine[2];
-        System.out.println("line 0  = " + lines[0]);
+        // System.out.println("line 0  = " + lines[0]);
         for (int i = 1; i < lines.length; i++) {
             if(lines[i].isEmpty()) break;
-            System.out.println("line " + i + " = " + lines[i]);
+            // System.out.println("line " + i + " = " + lines[i]);
             String[] parts = lines[i].split(": ", 2);
             headers.put(parts[0], parts[1]);
         } 
