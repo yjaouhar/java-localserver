@@ -35,5 +35,8 @@ public final class ConfigLoader {
         Map<String, Object> obj = (Map<String, Object>) root;
 
         return ConfigMapper.buildAppConfig(obj);
+
+
+        
     }
 }
