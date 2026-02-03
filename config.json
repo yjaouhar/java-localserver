@@ -67,7 +67,7 @@
             "name": "admin",
             "host": "127.0.0.2",
             "ports": [
-                9090
+                9090,7070
             ],
             "default_server": false,
             "client_max_body_size": 500000,

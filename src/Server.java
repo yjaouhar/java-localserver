@@ -12,8 +12,9 @@ public class Server {
 
     private final AppConfig appConfig;
 
-    static class ListenerInfo {
 
+
+    static class ListenerInfo {
         final int port;
         final List<String> serverNames = new ArrayList<>();
         final List<AppConfig.ServerConfig> serverCfgs = new ArrayList<>();
@@ -45,7 +46,7 @@ public class Server {
 
                 ServerSocketChannel server = ServerSocketChannel.open();
                 ////sc.host,
-                server.bind(new InetSocketAddress(port));
+                server.bind(new InetSocketAddress(sc.host,port));
                 server.configureBlocking(false);
 
                 SelectionKey key = server.register(selector, SelectionKey.OP_ACCEPT);
@@ -118,7 +119,7 @@ public class Server {
     private static AppConfig.ServerConfig chooseServerByPath(List<AppConfig.ServerConfig> cfgs, String host) {
         if (host != null) {
             for (AppConfig.ServerConfig sc : cfgs) {
-                  if(sc.host.equals(host)){
+                  if(sc.name.equals(host)){
                     return  sc ;
                   }
             }

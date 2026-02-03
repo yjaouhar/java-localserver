@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.util.*;
 import utils.AppConfig;
 import utils.JsonFormatValidator;
+import utils.util;
 
 public final class ConfigLoader {
 
@@ -75,7 +76,20 @@ public final class ConfigLoader {
         AppConfig.ServerConfig sc = new AppConfig.ServerConfig();
 
         sc.name = asString(required(s, "name", path), path + ".name");
-        sc.host = asString(required(s, "host", path), path + ".host");
+        String host = asString(required(s, "host", path), path + ".host");
+
+        // try {
+        //     InetAddress.getByName(host);
+        //     sc.host = host;
+        // } catch (Exception e) {
+        //     throw new IllegalArgumentException("host forma " + path);
+        // }
+
+        if (!util.isValidIPv4(host)){
+             throw new IllegalArgumentException("host forma " + path);
+        }else {
+            sc.host = host;
+        }
 
         // ports
         List<Object> ports = asArray(required(s, "ports", path), path + ".ports");
@@ -169,6 +183,7 @@ public final class ConfigLoader {
         if (!obj.containsKey(key)) {
             throw new IllegalArgumentException("Missing required key: " + path + "." + key);
         }
+
         return obj.get(key);
     }
 
@@ -456,7 +471,8 @@ public final class ConfigLoader {
 
         private IllegalArgumentException error(String msg) {
             return new IllegalArgumentException(msg + " at index " + i);
-        }
+        } 
+
     }
 
     // @Override
