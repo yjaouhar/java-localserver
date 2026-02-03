@@ -41,16 +41,54 @@ public class HttpResponse {
         return ByteBuffer.wrap(response.toString().getBytes(StandardCharsets.UTF_8));
     }
 
-       public static HttpResponse badRequest() {
+    public static HttpResponse badRequest() {
         HttpResponse res = new HttpResponse(400, "Bad Request");
-
         res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
         res.setHeaders("Connection", "close");
-
         res.setBody("400 Bad Request");
-
         return res;
     }
+
+    public static HttpResponse forbidden() {
+        HttpResponse res = new HttpResponse(403, "Forbidden");
+        res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
+        res.setHeaders("Connection", "close");
+        res.setBody("403 Forbidden");
+        return res;
+    }
+
+    public static HttpResponse notFound() {
+        HttpResponse res = new HttpResponse(404, "Not Found");
+        res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
+        res.setHeaders("Connection", "close");
+        res.setBody("404 Not Found");
+        return res;
+    }
+
+    public static HttpResponse methodNotAllowed() {
+        HttpResponse res = new HttpResponse(405, "Method Not Allowed");
+        res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
+        res.setHeaders("Connection", "close");
+        res.setBody("405 Method Not Allowed");
+        return res;
+    }
+
+    public static HttpResponse payloadTooLarge() {
+        HttpResponse res = new HttpResponse(413, "Payload Too Large");
+        res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
+        res.setHeaders("Connection", "close");
+        res.setBody("413 Payload Too Large");
+        return res;
+    }
+
+    public static HttpResponse internalServerError() {
+        HttpResponse res = new HttpResponse(500, "Internal Server Error");
+        res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
+        res.setHeaders("Connection", "close");
+        res.setBody("500 Internal Server Error");
+        return res;
+    }
+
     
 
     
