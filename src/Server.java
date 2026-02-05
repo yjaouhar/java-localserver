@@ -1,4 +1,6 @@
 
+import http.HttpRequest;
+import http.HttpResponse;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
@@ -104,10 +106,12 @@ public class Server {
                         System.out.println("Headers: " + request.getHeaders());
                         System.out.println("Body: " + request.getBody());
 
-                        AppConfig.ServerConfig chosen
-                                = chooseServerByPath(info.serverCfgs, request.getHeaders().get("Host"));
+                        AppConfig.ServerConfig chosen = chooseServerByPath(info.serverCfgs,
+                                request.getHeaders().get("Host"));
 
-                        System.out.println("ChosenServer: " + chosen.name);
+                        Router router = new Router(chosen, request);
+                        HttpResponse response = router.route();
+                        client.write(response.toByteBuffer());
                     }
 
                     client.close();

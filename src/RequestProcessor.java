@@ -1,3 +1,6 @@
+
+import http.HttpRequest;
+import http.HttpResponse;
 import utils.json.AppConfig;
 
 public class RequestProcessor {
@@ -21,7 +24,7 @@ public class RequestProcessor {
             }
         }
         // if(matchedServer == null) {
-            return HttpResponse.badRequest();
+        return HttpResponse.ErrorResponse(400, "Bad Request", "No matching server configuration");
         // }
 
 

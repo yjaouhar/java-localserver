@@ -1,29 +1,29 @@
 package handlers;
 
+import http.HttpRequest;
+import http.HttpResponse;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import utils.json.AppConfig;
 
 public class UploadHandler {
 
-    public static int handleUpload(HttpRequest request) {
+    public static HttpResponse handleUpload(AppConfig.RouteConfig rout, HttpRequest request) {
         if (request == null) {
-            return 400;
+            return HttpResponse.ErrorResponse(400, "Bad Request", "Request is null");
         }
         if (request.getMethod() == null || !request.getMethod().equals("POST")) {
-            return 405; // Method Not Allowed
+            return HttpResponse.ErrorResponse(405, "Method Not Allowed", "Only POST method is allowed");
         }
 
         String contentType = request.getHeader("Content-Type");
         if (contentType == null || !contentType.startsWith("multipart/form-data")) {
-            return 415; // Unsupported Media Type
+            return HttpResponse.ErrorResponse(415, "Unsupported Media Type", "Content-Type must be multipart/form-data");
         }
         String boundary = null;
         for (String param : manualSplit(contentType, ";")) {
@@ -32,9 +32,9 @@ public class UploadHandler {
             }
         }
         if (boundary == null || boundary.isEmpty()) {
-            return 415;
+            return HttpResponse.ErrorResponse(400, "Bad Request", "Boundary parameter is missing in Content-Type");
         }
-        String body = new String(request.getBody(), StandardCharsets.ISO_8859_1);
+        String body = request.getBody();
         List<String> parts = manualSplit(body, "--" + boundary);
 
         boolean uploaded = false;
@@ -64,16 +64,16 @@ public class UploadHandler {
                     uploaded = true;
 
                 } catch (IOException e) {
-                    return 500;
+                    return HttpResponse.ErrorResponse(500, "Internal Server Error", "Failed to save uploaded file: " + e.getMessage());
                 }
 
             }
         }
         if (!uploaded) {
-            return 400;
+            return HttpResponse.ErrorResponse(400, "Bad Request", "No file part found in the request");
         }
 
-        return 201;
+        return HttpResponse.successResponse(201, "Created", "File uploaded successfully");
     }
 
     private static String extractFileName(String part) {
@@ -101,48 +101,6 @@ public class UploadHandler {
         }
 
         return parts;
-    }
-
-    public class HttpRequest {
-
-        private final String method;
-        private final String path;
-        private final String version;
-        private final Map<String, String> headers;
-        private final byte[] body;
-
-        public HttpRequest(String method, String path, String version, Map<String, String> headers, byte[] body) {
-            this.method = method;
-            this.path = path;
-            this.version = version;
-            this.headers = (headers == null) ? Collections.emptyMap() : new HashMap<>(headers);
-            this.body = body;
-        }
-
-        public String getMethod() {
-            return method;
-        }
-
-        public String getPath() {
-            return path;
-        }
-
-        public String getVersion() {
-            return version;
-        }
-
-        public Map<String, String> getHeaders() {
-            return Collections.unmodifiableMap(headers);
-        }
-
-        public byte[] getBody() {
-            return body;
-        }
-
-        public String getHeader(String name) {
-            return headers.get(name.toLowerCase());
-        }
-
     }
 
 }

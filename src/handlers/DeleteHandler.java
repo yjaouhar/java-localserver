@@ -1,38 +1,41 @@
 package handlers;
 
+import http.HttpRequest;
+import http.HttpResponse;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import utils.json.AppConfig;
 
 public class DeleteHandler {
 
-    public static int handleDelete(UploadHandler.HttpRequest request) {
+    public static HttpResponse handleDelete(AppConfig.RouteConfig route,HttpRequest request) {
 
         if (request == null) {
-            return 400;
+            return HttpResponse.ErrorResponse(400, "Bad Request", "Request is null");
         }
         if (request.getMethod() == null || !request.getMethod().equals("DELETE")) {
-            return 405;
+            return HttpResponse.ErrorResponse(405, "Method Not Allowed", "Only DELETE method is allowed");
         }
 
         String filePath = request.getPath();
         if (filePath == null || filePath.isEmpty()) {
-            return 400;
+            return HttpResponse.ErrorResponse(400, "Bad Request", "File path is missing");
         }
-        Path uploadDir = Paths.get("uploads");
+        Path uploadDir = Paths.get(route.root);
         Path target = uploadDir.resolve(filePath).normalize();
         if (!target.startsWith(uploadDir)) {
-            return 403; // Forbidden
+            return HttpResponse.ErrorResponse(403, "Forbidden", "Access to the specified path is forbidden"); 
         }
         if (!Files.exists(target)) {
-            return 404;
+            return HttpResponse.ErrorResponse(404, "Not Found", "File not found");
         }
         try {
             Files.delete(target);
         } catch (IOException e) {
-            return 500;
+            return HttpResponse.ErrorResponse(500, "Internal Server Error", "Failed to delete file: " + e.getMessage());
         }
-        return 200;
+        return HttpResponse.successResponse(200, "OK", "File deleted successfully");
     }
 }

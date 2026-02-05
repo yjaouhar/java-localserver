@@ -43,7 +43,7 @@
                     ]
                 },
                 {
-                    "path": "/cgi-bin",
+                    "path": "/script.py",
                     "root": "www/cgi-bin",
                     "methods": [
                         "GET",
