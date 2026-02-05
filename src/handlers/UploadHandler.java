@@ -9,21 +9,22 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import utils.json.AppConfig;
 
 public class UploadHandler {
 
-    public static HttpResponse handleUpload(AppConfig.RouteConfig rout, HttpRequest request) {
+    public static HttpResponse handleUpload(AppConfig.RouteConfig rout, HttpRequest request , Map<Integer, String> errorPages) {
         if (request == null) {
-            return HttpResponse.ErrorResponse(400, "Bad Request", "Request is null");
+            return HttpResponse.ErrorResponse(400, "Bad Request", "Request is null", errorPages.get(400));
         }
         if (request.getMethod() == null || !request.getMethod().equals("POST")) {
-            return HttpResponse.ErrorResponse(405, "Method Not Allowed", "Only POST method is allowed");
+            return HttpResponse.ErrorResponse(405, "Method Not Allowed", "Only POST method is allowed", errorPages.get(405));
         }
 
         String contentType = request.getHeader("Content-Type");
         if (contentType == null || !contentType.startsWith("multipart/form-data")) {
-            return HttpResponse.ErrorResponse(415, "Unsupported Media Type", "Content-Type must be multipart/form-data");
+            return HttpResponse.ErrorResponse(415, "Unsupported Media Type", "Content-Type must be multipart/form-data", errorPages.get(415));
         }
         String boundary = null;
         for (String param : manualSplit(contentType, ";")) {
@@ -32,7 +33,7 @@ public class UploadHandler {
             }
         }
         if (boundary == null || boundary.isEmpty()) {
-            return HttpResponse.ErrorResponse(400, "Bad Request", "Boundary parameter is missing in Content-Type");
+            return HttpResponse.ErrorResponse(400, "Bad Request", "Boundary parameter is missing in Content-Type", errorPages.get(400));
         }
         String body = request.getBody();
         List<String> parts = manualSplit(body, "--" + boundary);
@@ -64,13 +65,13 @@ public class UploadHandler {
                     uploaded = true;
 
                 } catch (IOException e) {
-                    return HttpResponse.ErrorResponse(500, "Internal Server Error", "Failed to save uploaded file: " + e.getMessage());
+                    return HttpResponse.ErrorResponse(500, "Internal Server Error", "Failed to save uploaded file: " + e.getMessage(), errorPages.get(500));
                 }
 
             }
         }
         if (!uploaded) {
-            return HttpResponse.ErrorResponse(400, "Bad Request", "No file part found in the request");
+            return HttpResponse.ErrorResponse(400, "Bad Request", "No file part found in the request", errorPages.get(400));
         }
 
         return HttpResponse.successResponse(201, "Created", "File uploaded successfully");

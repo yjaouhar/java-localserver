@@ -14,9 +14,8 @@ public class Server {
 
     private final AppConfig appConfig;
 
-
-
     static class ListenerInfo {
+
         final int port;
         final List<String> serverNames = new ArrayList<>();
         final List<AppConfig.ServerConfig> serverCfgs = new ArrayList<>();
@@ -48,7 +47,7 @@ public class Server {
 
                 ServerSocketChannel server = ServerSocketChannel.open();
                 ////sc.host,
-                server.bind(new InetSocketAddress(sc.host,port));
+                server.bind(new InetSocketAddress(sc.host, port));
                 server.configureBlocking(false);
 
                 SelectionKey key = server.register(selector, SelectionKey.OP_ACCEPT);
@@ -85,10 +84,9 @@ public class Server {
                         continue;
                     }
 
-                    System.out.println("== " + client.getRemoteAddress()
-                            + " | port=" + info.port
-                            + " | servers=" + info.serverNames);
-
+                    // System.out.println("== " + client.getRemoteAddress()
+                    //         + " | port=" + info.port
+                    //         + " | servers=" + info.serverNames);
                     ByteBuffer buffer = ByteBuffer.allocate(1024);
                     int bytesRead = client.read(buffer);
                     if (bytesRead == -1) {
@@ -101,16 +99,17 @@ public class Server {
                     request.consume(buffer);
 
                     if (request.isRequestCompleted()) {
-                        System.out.println("Method: " + request.getMethod());
-                        System.out.println("Path: " + request.getPath());
-                        System.out.println("Headers: " + request.getHeaders());
-                        System.out.println("Body: " + request.getBody());
+                        // System.out.println("Method: " + request.getMethod());
+                        // System.out.println("Path: " + request.getPath());
+                        // System.out.println("Headers: " + request.getHeaders());
+                        // System.out.println("Body: " + request.getBody());
 
                         AppConfig.ServerConfig chosen = chooseServerByPath(info.serverCfgs,
                                 request.getHeaders().get("Host"));
 
                         Router router = new Router(chosen, request);
                         HttpResponse response = router.route();
+                        // System.out.println("******* Response: " + response.getStatusCode() + " **** " + response.getStatusMessage() + " ******* " + response.getBody());
                         client.write(response.toByteBuffer());
                     }
 
@@ -123,9 +122,9 @@ public class Server {
     private static AppConfig.ServerConfig chooseServerByPath(List<AppConfig.ServerConfig> cfgs, String host) {
         if (host != null) {
             for (AppConfig.ServerConfig sc : cfgs) {
-                  if(sc.name.equals(host)){
-                    return  sc ;
-                  }
+                if (sc.name.equals(host)) {
+                    return sc;
+                }
             }
         }
         return cfgs.isEmpty() ? null : cfgs.get(0);

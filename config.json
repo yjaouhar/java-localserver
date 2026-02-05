@@ -5,7 +5,8 @@
             "host": "127.0.0.1",
             "ports": [
                 8080,
-                8081,9090
+                8081,
+                9090
             ],
             "default_server": true,
             "client_max_body_size": 1000000,
@@ -15,36 +16,37 @@
                 "404": "error_pages/404.html",
                 "405": "error_pages/405.html",
                 "413": "error_pages/413.html",
+                "415": "error_pages/415.html",
                 "500": "error_pages/500.html"
             },
             "routes": [
                 {
                     "path": "/",
-                    "root": "www/html",
+                    "root": "resources/",
                     "methods": [
                         "GET"
                     ],
                     "index": "index.html",
-                    "directory_listing": false
+                    "directory_listing": true
                 },
                 {
                     "path": "/upload",
-                    "root": "www/uploads",
+                    "root": "resources/uploads",
                     "methods": [
                         "POST"
                     ],
-                    "upload_dir": "www/uploads"
+                    "upload_dir": "resources/uploads"
                 },
                 {
-                    "path":"/delete",
-                    "root": "www/uploads",
+                    "path": "/delete",
+                    "root": "resources/uploads",
                     "methods": [
                         "DELETE"
                     ]
                 },
                 {
                     "path": "/script.py",
-                    "root": "www/cgi-bin",
+                    "root": "resources/cgi-bin",
                     "methods": [
                         "GET",
                         "POST"
@@ -67,14 +69,15 @@
             "name": "admin",
             "host": "127.0.0.2",
             "ports": [
-                9090,7070
+                9090,
+                7070
             ],
             "default_server": false,
             "client_max_body_size": 500000,
             "routes": [
                 {
                     "path": "/",
-                    "root": "www/admin",
+                    "root": "resources/admin",
                     "methods": [
                         "GET"
                     ],

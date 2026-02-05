@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -19,7 +20,7 @@ public class CGIHandler {
 
     private static final int TIMEOUT_SECONDS = 5;
 
-    public static HttpResponse handleCGI(RouteConfig rout, HttpRequest request) {
+    public static HttpResponse handleCGI(RouteConfig rout, HttpRequest request, Map<Integer, String> errorPages) {
         ExecutorService executor = Executors.newFixedThreadPool(2);
 
         try {
@@ -28,7 +29,8 @@ public class CGIHandler {
             Path scriptPath = Paths.get(rout.root, path).normalize();
 
             if (!scriptPath.startsWith(rout.root) || !Files.exists(scriptPath)) {
-                return HttpResponse.ErrorResponse(404, "Not Found", "CGI script not found");
+
+                return HttpResponse.ErrorResponse(404, "Not Found", "CGI script not found", errorPages.get(404));
             }
 
             ProcessBuilder pb = new ProcessBuilder("python3", scriptPath.toString());
@@ -64,7 +66,7 @@ public class CGIHandler {
 
             if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
-                return HttpResponse.ErrorResponse(504, "Gateway Timeout", "CGI script timed out");
+                return HttpResponse.ErrorResponse(504, "Gateway Timeout", "CGI script timed out" , errorPages.get(504));
             }
 
             String stdout = stdoutFuture.get(1, TimeUnit.SECONDS);
@@ -73,12 +75,14 @@ public class CGIHandler {
             int exitCode = process.exitValue();
 
             if (exitCode != 0) {
-                return HttpResponse.ErrorResponse(500, "Internal Server Error", "CGI script error");
+                return HttpResponse.ErrorResponse(500, "Internal Server Error", "CGI script error", errorPages.get(500));
             }
-            System.out.println("CGI Error: " + stderr);
+            if (!stderr.isEmpty()) {
+                return HttpResponse.ErrorResponse(500, "Internal Server Error", "CGI script error: " + stderr, errorPages.get(500));
+            }
             return HttpResponse.successResponse(200, "OK", stdout);
         } catch (Exception e) {
-            return HttpResponse.ErrorResponse(500, "Internal Server Error", "CGI execution failed: " + e.getMessage());
+            return HttpResponse.ErrorResponse(500, "Internal Server Error", "CGI execution failed: " + e.getMessage(), errorPages.get(500));
         } finally {
             executor.shutdownNow();
         }
