@@ -27,42 +27,35 @@ public class Router {
         RouteConfig matchedRoute = null;
 
         for (RouteConfig route : config.routes) {
-            // System.out.println("******* " + path + " | " + route.path + " | " + route.cgi + " | " + route.root);
             if (path.equals(route.path)) {
                 matchedRoute = route;
                 break;
             }
         }
-        // 3️⃣ no route → 404
         if (matchedRoute == null) {
             return HttpResponse.ErrorResponse(404, "Not Found", "No matching route", config.errorPages.get(404));
         }
 
-        // 4️⃣ method check → 405
         if (matchedRoute.methods != null
                 && !matchedRoute.methods.contains(request.getMethod())) {
             return HttpResponse.ErrorResponse(405, "Method Not Allowed", "Method not allowed for this route", config.errorPages.get(405));
         }
 
-        // 5️⃣ redirect
         if (matchedRoute.redirect != null) {
             HttpResponse redirectResponse = new HttpResponse(matchedRoute.redirect.code, "Redirect");
             redirectResponse.setHeaders("Location", matchedRoute.redirect.location);
             return redirectResponse;
         }
 
-        // 6️⃣ CGI
         if (matchedRoute.cgi != null) {
             return CGIHandler.handleCGI(matchedRoute, request, config.errorPages);
         }
 
-        // 7️⃣ upload
         if ("POST".equals(request.getMethod())
                 && matchedRoute.root != null) {
             return handlers.UploadHandler.handleUpload(matchedRoute, request, config.errorPages);
         }
 
-        // 8️⃣ delete
         if ("DELETE".equals(request.getMethod())) {
             return handlers.DeleteHandler.handleDelete(matchedRoute, request, config.errorPages);
         }

@@ -5,11 +5,21 @@ import java.util.Map;
 
 public class HttpRequest {
 
-    private StringBuilder buffer = new StringBuilder(), bodyBuffer = new StringBuilder();
-    private boolean headersComplete, bodyComplete = false;
+    private StringBuilder headerBuffer = new StringBuilder();
+    private StringBuilder bodyBuffer = new StringBuilder();
+    private StringBuilder chunkBuffer = new StringBuilder();
+
+    private boolean headersComplete = false;
+    private boolean bodyComplete = false;
+
     private int contentLength = 0;
+    private boolean isChunked = false;
+
+    private int currentChunkSize = -1;
+    private boolean readingChunkSize = true;
+
     private Map<String, String> headers = new HashMap<>();
-    private String method, path, version, body;
+    private String method, path, version;
 
     public void consume(ByteBuffer byteBuffer) {
         while (byteBuffer.hasRemaining()) {
@@ -21,29 +31,44 @@ public class HttpRequest {
                     parseHeaders();
                     if (headers.containsKey("Content-Length")) {
                         contentLength = Integer.parseInt(headers.get("Content-Length"));
+                        if (contentLength == 0) {
+                            bodyComplete = true;
+                        }
                     }
                     if (contentLength == 0) {
                         bodyComplete = true;
-                        break;
                     }
                 }
             } else {
                 bodyBuffer.append(c);
                 if (bodyBuffer.length() >= contentLength) {
                     bodyComplete = true;
-                    break;
+                    return;
                 }
+
+                readingChunkSize = false;
+            }
+
+            if (!readingChunkSize) {
+                if (chunkBuffer.length() < currentChunkSize + 2) return;
+
+                bodyBuffer.append(chunkBuffer.substring(0, currentChunkSize));
+                chunkBuffer.delete(0, currentChunkSize + 2);
+
+                readingChunkSize = true;
+                currentChunkSize = -1;
             }
         }
     }
 
     private void parseHeaders() {
-        String[] lines = buffer.toString().split("\r\n");
+        String[] lines = headerBuffer.toString().split("\r\n");
         String[] requestLine = lines[0].split(" ");
+
         method = requestLine[0];
         path = requestLine[1];
         version = requestLine[2];
-        // System.out.println("line 0  = " + lines[0]);
+        System.out.println("line 0  = " + lines[0]);
         for (int i = 1; i < lines.length; i++) {
             if (lines[i].isEmpty()) {
                 break;

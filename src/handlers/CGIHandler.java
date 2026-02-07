@@ -59,9 +59,7 @@ public class CGIHandler {
             } catch (IOException e) {
                 if (!isIgnorableStdinError(e)) {
                     throw e;
-                } else {
-                    System.out.println("Ignored stdin error: " + e.getMessage());
-                }
+                } 
             }
 
             if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {

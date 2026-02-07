@@ -17,5 +17,4 @@
     body:  fhgdlkg 
     
 
-javac -d bin -sourcepath src src/Main.java 
-java -cp bin Main
+javac -d bin -sourcepath src src/Main.java && java -cp bin Main
