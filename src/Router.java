@@ -20,7 +20,9 @@ public class Router {
         if (request == null || request.getPath() == null) {
             return HttpResponse.ErrorResponse(400, "Bad Request", "Invalid HTTP request", config.errorPages.get(400));
         }
-
+        if (request.getBody() != null && request.getBody().length() > config.clientMaxBodySize) {
+            return HttpResponse.ErrorResponse(413, "Payload Too Large", "Request body exceeds maximum allowed size", config.errorPages.get(413));
+        }
         String path = request.getPath();
         RouteConfig matchedRoute = null;
 
@@ -31,7 +33,6 @@ public class Router {
                 break;
             }
         }
-// System.out.println("Matched route: " + matchedRoute.path + " | CGI: " + matchedRoute.cgi + " | Upload: " + matchedRoute.root);
         // 3️⃣ no route → 404
         if (matchedRoute == null) {
             return HttpResponse.ErrorResponse(404, "Not Found", "No matching route", config.errorPages.get(404));
