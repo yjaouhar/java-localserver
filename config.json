@@ -77,12 +77,12 @@
             "routes": [
                 {
                     "path": "/",
-                    "root": "resources/admin",
+                    "root": "resources",
                     "methods": [
                         "GET"
                     ],
                     "index": "dashboard.html",
-                    "directory_listing": true
+                    "directory_listing": false
                 }
             ]
         }

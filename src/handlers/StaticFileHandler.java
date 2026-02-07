@@ -6,12 +6,11 @@ import java.io.IOException;
 import java.nio.file.*;
 import java.util.Comparator;
 import java.util.Map;
-
 import utils.json.AppConfig;
 
 public class StaticFileHandler {
 
-    public static HttpResponse handle(HttpRequest request, AppConfig.RouteConfig route ,  Map<Integer, String> errorPages) {
+    public static HttpResponse handle(HttpRequest request, AppConfig.RouteConfig route, Map<Integer, String> errorPages) {
 
         if (route.root == null) {
             return HttpResponse.ErrorResponse(500, "Server Error", "No root directory defined", errorPages.get(500));
@@ -25,7 +24,7 @@ public class StaticFileHandler {
         }
 
         try {
-            if (Files.isDirectory(requestedPath)) {
+            if (Files.isDirectory(requestedPath) && route.directoryListing) {
                 if (!route.directoryListing) {
                     return HttpResponse.ErrorResponse(403, "Forbidden", "Directory listing not allowed", errorPages.get(403));
                 }
@@ -69,6 +68,9 @@ public class StaticFileHandler {
 
             } else if (Files.exists(requestedPath)) {
                 // single file
+                if (Files.isDirectory(requestedPath)) {
+                    requestedPath =rootDir.resolve(route.index).normalize();
+                }
                 byte[] fileBytes = Files.readAllBytes(requestedPath);
 
                 HttpResponse res = new HttpResponse(200, "OK");

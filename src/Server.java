@@ -33,7 +33,6 @@ public class Server {
         final ByteBuffer readBuf;
         final HttpRequest request;
 
-        // ✅ إضافات جديدة
         ByteBuffer writeBuf;
         long connectedAt;
         long lastActivityAt;
@@ -61,7 +60,6 @@ public class Server {
         Selector selector = Selector.open();
         Map<Integer, SelectionKey> openedPorts = new HashMap<>();
 
-        // ✅ فتح البورتات
         for (AppConfig.ServerConfig sc : appConfig.servers) {
             for (int port : sc.ports) {
                 if (openedPorts.containsKey(port)) {
@@ -87,13 +85,13 @@ public class Server {
             }
         }
 
-        System.out.println("\n🚀 Server started successfully!\n");
+        System.out.println("\n Server started successfully!\n");
 
         while (true) {
             int ready = selector.select(200);
 
             // check timeouts
-            checkTimeouts(selector);
+            // checkTimeouts(selector);
 
             if (ready == 0) {
                 continue;
@@ -117,7 +115,6 @@ public class Server {
                         onWrite(key);
                     }
                 } catch (Exception e) {
-                    // ✅ معالجة الأخطاء بدون crash
                     System.err.println("⚠ Event error: " + e.getMessage());
                     safeCleanup(key);
                 }
@@ -141,8 +138,8 @@ public class Server {
         SelectionKey ckey = client.register(selector, SelectionKey.OP_READ);
         ckey.attach(ctx);
 
-        System.out.println("✓ Connection from " + client.getRemoteAddress()
-                + " on port " + info.port);
+        // System.out.println("✓ Connection from " + client.getRemoteAddress()
+        //         + " on port " + info.port);
     }
 
     private void onRead(SelectionKey key) {
@@ -154,11 +151,13 @@ public class Server {
             int n = client.read(ctx.readBuf);
 
             if (n == -1) {
-                // ✅ العميل أغلق الاتصال
+                // client closed connection
+                // System.out.println("Client closed connection");
                 cleanup(key, client, ctx);
                 return;
             }
 
+            // no data read, just return and wait for next event
             if (n == 0) {
                 return;
             }
@@ -166,72 +165,56 @@ public class Server {
             ctx.updateActivity();
             ctx.readBuf.flip();
 
-            // ✅ معالجة البيانات المقروءة
             ctx.request.consume(ctx.readBuf);
 
             if (ctx.request.isRequestCompleted()) {
-                // ✅ اختيار الـ server config
-                String hostHeader = HttpRequest.getHeaderIgnoreCase(
-                        ctx.request.getHeaders(), "Host"
-                );
+                String hostHeader = HttpRequest.getHeaderIgnoreCase(ctx.request.getHeaders(), "Host");
+
                 ctx.chosenServer = chooseServerByHost(
                         ctx.listenerInfo.serverCfgs, hostHeader
                 );
 
-                // ✅ تطبيق حد الـ body size
-                long maxBodySize = ctx.chosenServer != null
-                        ? ctx.chosenServer.clientMaxBodySize
-                        : 1_000_000;
+                // set max body size based on chosen server
+                long maxBodySize = ctx.chosenServer != null ? ctx.chosenServer.clientMaxBodySize : 1_000_000;
                 ctx.request.setMaxBodyBytes(maxBodySize);
 
-                System.out.println("→ " + ctx.request.getMethod()
-                        + " " + ctx.request.getPath());
-
-                // ✅ إنشاء response بسيط
-                String response = buildSimpleResponse(ctx);
-                ctx.writeBuf = ByteBuffer.wrap(response.getBytes());
-                ctx.responseReady = true;
-
-                // ✅ التبديل لوضع الكتابة
+                // change interest to write
                 key.interestOps(SelectionKey.OP_WRITE);
             }
 
         } catch (IllegalArgumentException e) {
-            // ✅ أخطاء HTTP (400, 413...)
+            //error from request parsing (e.g. headers too large, invalid format, etc)
             handleHttpError(key, ctx, e.getMessage());
         } catch (Exception e) {
-            // ✅ أخطاء عامة
+            // other errors (e.g. IO errors)
             System.err.println("⚠ Read error: " + e.getMessage());
             handleHttpError(key, ctx, "500 Internal Server Error");
         }
     }
 
     private void onWrite(SelectionKey key) {
+
         ConnCtx ctx = (ConnCtx) key.attachment();
         SocketChannel client = ctx.client;
 
         try {
-            if (ctx.writeBuf != null && ctx.writeBuf.hasRemaining()) {
-                int written = client.write(ctx.writeBuf);
-
-                if (written > 0) {
-                    ctx.updateActivity();
-                }
+            if (ctx.writeBuf == null) {
+                Router router = new Router(ctx.chosenServer, ctx.request);
+                http.HttpResponse resp = router.route();
+                ctx.writeBuf = resp.toByteBuffer();
             }
 
-            // ✅ انتهت الكتابة
-            if (ctx.writeBuf != null && !ctx.writeBuf.hasRemaining()) {
-                System.out.println("✓ Response sent");
+            client.write(ctx.writeBuf);
+
+            if (!ctx.writeBuf.hasRemaining()) {
                 cleanup(key, client, ctx);
             }
 
         } catch (Exception e) {
-            System.err.println("⚠ Write error: " + e.getMessage());
             safeCleanup(key);
         }
     }
 
-    // ✅ فحص الـ Timeouts
     private void checkTimeouts(Selector selector) {
         long now = System.currentTimeMillis();
         long headerTimeout = appConfig.timeouts.headerMs;
@@ -246,14 +229,14 @@ public class Server {
             long elapsed = now - ctx.connectedAt;
             long idle = now - ctx.lastActivityAt;
 
-            // ✅ Timeout للـ headers
+            // before request is fully read, check header timeout
             if (!ctx.request.isRequestCompleted() && elapsed > headerTimeout) {
                 System.out.println("⏱ Header timeout");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
-            // ✅ Timeout للـ body
+            // after headers read but before full body is read, check body timeout
             if (ctx.request.isRequestCompleted() && !ctx.responseReady
                     && elapsed > bodyTimeout) {
                 System.out.println("⏱ Body timeout");
@@ -261,7 +244,7 @@ public class Server {
                 continue;
             }
 
-            // ✅ Idle timeout
+            //Idle timeout
             if (idle > appConfig.timeouts.idleKeepAliveMs) {
                 System.out.println("⏱ Idle timeout");
                 safeCleanup(key);
@@ -294,7 +277,6 @@ public class Server {
         }
     }
 
-    // ✅ بناء response بسيط للاختبار
     private String buildSimpleResponse(ConnCtx ctx) {
         String body = "<html><body>"
                 + "<h1>It Works!</h1>"
@@ -347,23 +329,23 @@ public class Server {
 
         String host = normalizeHost(hostHeader);
 
-        // ✅ بحث حسب الاسم
+        // search for matching server name in Host header
         if (host != null) {
             for (AppConfig.ServerConfig sc : cfgs) {
-                if (sc.name != null && host.contains(sc.name.toLowerCase())) {
+                if (sc.name != null && host.equals(sc.name.toLowerCase())) {
                     return sc;
                 }
             }
         }
 
-        // ✅ البحث عن default server
+        // serch for default server
         for (AppConfig.ServerConfig sc : cfgs) {
             if (sc.defaultServer) {
                 return sc;
             }
         }
 
-        // ✅ أول server
+        // final fallback to first server
         return cfgs.isEmpty() ? null : cfgs.get(0);
     }
 
@@ -376,6 +358,7 @@ public class Server {
         if (idx != -1) {
             h = h.substring(0, idx);
         }
+        // System.err.println("Host header: " + hostHeader + " → normalized: " + h);
         return h;
     }
 }
