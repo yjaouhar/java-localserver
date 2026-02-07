@@ -14,4 +14,7 @@
    : HOst local 8080\r\n
     contenle : 77\r\n
     \r\n
-    body:  fhgdlkg hoir
+    body:  fhgdlkg 
+    
+
+javac -d bin -sourcepath src src/Main.java && java -cp bin Main

@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import utils.JsonFormatValidator;
+import utils.JsonFormatValidator.InnerJsonFormatValidator;
 import utils.json.AppConfig;
 import utils.json.ConfigMapper;
 import utils.json.MiniJsonParser;
@@ -20,7 +21,7 @@ public final class ConfigLoader {
     }
 
     public static AppConfig loadFromString(String json) {
-        JsonFormatValidator.InnerJsonFormatValidator v = JsonFormatValidator.isValidJsonFormat(json);
+        InnerJsonFormatValidator v = JsonFormatValidator.isValidJsonFormat(json);
         if (!v.status) {
             throw new IllegalArgumentException("Invalid JSON format: " + v.message
                     + (v.index != null ? (" at index " + v.index) : ""));

@@ -1,3 +1,4 @@
+package http;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
@@ -21,56 +22,26 @@ public class HttpRequest {
     private String method, path, version;
 
     public void consume(ByteBuffer byteBuffer) {
-        while (byteBuffer.hasRemaining() && !bodyComplete) {
+        while (byteBuffer.hasRemaining()) {
             char c = (char) byteBuffer.get();
             if (!headersComplete) {
-                headerBuffer.append(c);
-
-                if (headerBuffer.indexOf("\r\n\r\n") != -1) {
+                buffer.append(c);
+                if (buffer.indexOf("\r\n\r\n") != -1) {
                     headersComplete = true;
                     parseHeaders();
-
-                    if ("chunked".equalsIgnoreCase(headers.get("Transfer-Encoding"))) {
-                        isChunked = true;
-                    } else if (headers.containsKey("Content-Length")) {
+                    if (headers.containsKey("Content-Length")) {
                         contentLength = Integer.parseInt(headers.get("Content-Length"));
                         if (contentLength == 0) {
                             bodyComplete = true;
                         }
                     }
-                    int idx = headerBuffer.indexOf("\r\n\r\n") + 4;
-                    if (idx < headerBuffer.length()) {
-                        chunkBuffer.append(headerBuffer.substring(idx));
-                    }
-                }
-            }
-
-            /* ================= BODY ================= */
-            else {
-                chunkBuffer.append(c);
-
-                if (isChunked) {
-                    readChunkedBody();
-                } else {
-                    bodyBuffer.append(c);
-                    if (bodyBuffer.length() >= contentLength) {
+                    if (contentLength == 0) {
                         bodyComplete = true;
                     }
                 }
-            }
-        }
-    }
-    private void readChunkedBody() {
-        while (true) {
-            if (readingChunkSize) {
-                int rn = chunkBuffer.indexOf("\r\n");
-                if (rn == -1) return;
-
-                String sizeLine = chunkBuffer.substring(0, rn);
-                currentChunkSize = Integer.parseInt(sizeLine.trim(), 16);
-                chunkBuffer.delete(0, rn + 2);
-
-                if (currentChunkSize == 0) {
+            } else {
+                bodyBuffer.append(c);
+                if (bodyBuffer.length() >= contentLength) {
                     bodyComplete = true;
                     return;
                 }
@@ -99,8 +70,10 @@ public class HttpRequest {
         version = requestLine[2];
         System.out.println("line 0  = " + lines[0]);
         for (int i = 1; i < lines.length; i++) {
-            if(lines[i].isEmpty()) break;
-            System.out.println("line " + i + " = " + lines[i]);
+            if (lines[i].isEmpty()) {
+                break;
+            }
+            // System.out.println("line " + i + " = " + lines[i]);
             String[] parts = lines[i].split(": ", 2);
             headers.put(parts[0], parts[1]);
         }
@@ -124,5 +97,8 @@ public class HttpRequest {
 
     public Map<String, String> getHeaders() {
         return headers;
+    }
+    public String getHeader(String key) {
+        return headers.get(key);
     }
 }
