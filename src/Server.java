@@ -175,6 +175,7 @@ public class Server {
                 );
 
                 // set max body size based on chosen server
+                System.out.println("max body size: "+ctx.chosenServer.clientMaxBodySize);
                 long maxBodySize = ctx.chosenServer != null ? ctx.chosenServer.clientMaxBodySize : 1_000_000;
                 ctx.request.setMaxBodyBytes(maxBodySize);
 

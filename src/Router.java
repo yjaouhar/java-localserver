@@ -25,6 +25,7 @@ public class Router {
         // Extra safety: body size check based on file size
         if (request.getBodyFile() != null) {
             try {
+                System.err.println("max body size: "+config.clientMaxBodySize+"  actual body size: "+Files.size(request.getBodyFile()));
                 long size = Files.size(request.getBodyFile());
                 if (size > config.clientMaxBodySize) {
                     return HttpResponse.ErrorResponse(413, "Payload Too Large",

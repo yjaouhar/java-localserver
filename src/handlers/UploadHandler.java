@@ -16,7 +16,7 @@ public class UploadHandler {
         if (request == null) {
             return HttpResponse.ErrorResponse(400, "Bad Request", "Request is null", errorPages.get(400));
         }
-        System.out.println("Handling upload for path: " + request.getPath() + " method: " + request.getMethod());
+        // System.out.println("Handling upload for path: " + request.getPath() + " method: " + request.getMethod());
         if (request.getMethod() == null || !request.getMethod().equals("POST")) {
             return HttpResponse.ErrorResponse(405, "Method Not Allowed", "Only POST method is allowed", errorPages.get(405));
         }
@@ -28,12 +28,15 @@ public class UploadHandler {
         }
 
         String boundary = extractBoundary(contentType);
+                //  System.out.println("******* : " + boundary);
+
         if (boundary == null || boundary.isEmpty()) {
             return HttpResponse.ErrorResponse(400, "Bad Request",
                     "Boundary parameter is missing in Content-Type", errorPages.get(400));
         }
 
         Path bodyFile = request.getBodyFile();
+       
         if (bodyFile == null) {
             return HttpResponse.ErrorResponse(400, "Bad Request",
                     "Missing request body file", errorPages.get(400));
@@ -126,9 +129,6 @@ public class UploadHandler {
                 return false;
             }
 
-            // After boundary, next line already handled inside copyUntilBoundary (it consumes CRLF around boundary)
-            // We need to check if it's final boundary: copyUntilBoundary sets final flag via return.
-            // Here we just continue to next part.
         }
     }
 
@@ -157,23 +157,16 @@ public class UploadHandler {
                     out.write(w, 0, dataLen);
                 }
 
-                // We have consumed "\r\n--boundary" already in window.
-                // Now we must read the rest of boundary line: either "--" (final) or "\r\n"
-                // But note: marker begins with \r\n, so we should also discard those 2 bytes from content.
-                // Since marker includes \r\n, data before idx is content WITHOUT that \r\n (good).
 
-                // Now read next two bytes to detect final boundary
                 int c1 = in.read();
                 int c2 = in.read();
                 if (c1 == -1 || c2 == -1) return true;
 
                 if (c1 == '-' && c2 == '-') {
-                    // final boundary. consume trailing CRLF if present
-                    readLineIso(in); // consumes rest of line (usually empty)
+                    readLineIso(in); 
                     return true;
                 } else {
-                    // likely \r\n, but could be something else; consume remainder of line
-                    // We already read two bytes; put them into a line buffer and finish line
+                   
                     ByteArrayOutputStream rest = new ByteArrayOutputStream();
                     rest.write(c1);
                     rest.write(c2);

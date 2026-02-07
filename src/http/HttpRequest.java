@@ -157,6 +157,7 @@ public class HttpRequest {
                 return;
             }
             if (contentLength > maxBodyBytes) {
+                System.out.println("Request body too large: " + contentLength + " bytes " + " (max allowed: " + maxBodyBytes + " bytes)");
                 throw new IllegalArgumentException("413 Payload Too Large");
             }
             openBodyFile();
