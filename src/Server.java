@@ -27,6 +27,7 @@ public class Server {
     }
 
     static class ConnCtx {
+
         final ListenerInfo listenerInfo;
         final SocketChannel client;
         final ByteBuffer readBuf;
@@ -38,7 +39,26 @@ public class Server {
         boolean responseReady;
         AppConfig.ServerConfig chosenServer;
 
-        ConnCtx(ListenerInfo info, SocketChannel client, int bufSize,List<AppConfig.ServerConfig> serverCfgs ) {
+        // ✅ Rate limiting للـ uploads
+        long uploadBytesThisSecond = 0;
+        long lastSecondTimestamp = 0;
+        static final long MAX_UPLOAD_PER_SECOND = 5 * 1024 * 1024; // 5 MB/s
+
+        boolean shouldLimitUpload(int bytesAboutToRead) {
+
+            long now = System.currentTimeMillis() / 1000;
+
+            if (now != lastSecondTimestamp) {
+                uploadBytesThisSecond = 0;
+                lastSecondTimestamp = now;
+            }
+
+            uploadBytesThisSecond += bytesAboutToRead;
+
+            return uploadBytesThisSecond > MAX_UPLOAD_PER_SECOND;
+        }
+
+        ConnCtx(ListenerInfo info, SocketChannel client, int bufSize, List<AppConfig.ServerConfig> serverCfgs) {
             this.listenerInfo = info;
             this.client = client;
             this.readBuf = ByteBuffer.allocate(bufSize);
@@ -147,6 +167,9 @@ public class Server {
 
         try {
             ctx.readBuf.clear();
+            if (ctx.shouldLimitUpload(ctx.readBuf.capacity())) {
+                return;
+            }
             int n = client.read(ctx.readBuf);
 
             if (n == -1) {
@@ -167,9 +190,8 @@ public class Server {
             ctx.request.consume(ctx.readBuf);
 
             if (ctx.request.isRequestCompleted()) {
-      
-                ctx.chosenServer = ctx.request.getChosenServer();
 
+                ctx.chosenServer = ctx.request.getChosenServer();
 
                 // change interest to write
                 key.interestOps(SelectionKey.OP_WRITE);
@@ -213,6 +235,7 @@ public class Server {
         long now = System.currentTimeMillis();
         long headerTimeout = appConfig.timeouts.headerMs;
         long bodyTimeout = appConfig.timeouts.bodyMs;
+        long idleTimeout = appConfig.timeouts.idleKeepAliveMs;
 
         for (SelectionKey key : selector.keys()) {
             if (!key.isValid() || !(key.attachment() instanceof ConnCtx)) {
@@ -223,24 +246,22 @@ public class Server {
             long elapsed = now - ctx.connectedAt;
             long idle = now - ctx.lastActivityAt;
 
-            // before request is fully read, check header timeout
+           
             if (!ctx.request.isRequestCompleted() && elapsed > headerTimeout) {
-                System.out.println("⏱ Header timeout");
+                System.out.println("⏱ Header timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
-            // after headers read but before full body is read, check body timeout
             if (ctx.request.isRequestCompleted() && !ctx.responseReady
                     && elapsed > bodyTimeout) {
-                System.out.println("⏱ Body timeout");
+                System.out.println("⏱ Body processing timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
-            //Idle timeout
-            if (idle > appConfig.timeouts.idleKeepAliveMs) {
-                System.out.println("⏱ Idle timeout");
+            if (idle > idleTimeout) {
+                System.out.println("⏱ Idle timeout (" + idle + "ms)");
                 safeCleanup(key);
             }
         }
@@ -300,54 +321,47 @@ public class Server {
         } catch (Exception ignored) {
         }
     }
-
-    // private static AppConfig.ServerConfig chooseServerByHost(
-    //         List<AppConfig.ServerConfig> cfgs, String hostHeader) {
-
-    //     String host = normalizeHost(hostHeader);
-
-    //     // search for matching server name in Host header
-    //     if (host != null) {
-    //         for (AppConfig.ServerConfig sc : cfgs) {
-    //             if (sc.name != null && host.equals(sc.name.toLowerCase())) {
-    //                 return sc;
-    //             }
-    //         }
-    //     }
-
-    //     // serch for default server
-    //     for (AppConfig.ServerConfig sc : cfgs) {
-    //         if (sc.defaultServer) {
-    //             return sc;
-    //         }
-    //     }
-
-    //     // final fallback to first server
-    //     return cfgs.isEmpty() ? null : cfgs.get(0);
-    // }
-
-    // private static String normalizeHost(String hostHeader) {
-    //     if (hostHeader == null) {
-    //         return null;
-    //     }
-    //     String h = hostHeader.trim().toLowerCase();
-    //     int idx = h.indexOf(':');
-    //     if (idx != -1) {
-    //         h = h.substring(0, idx);
-    //     }
-    //     // System.err.println("Host header: " + hostHeader + " → normalized: " + h);
-    //     return h;
-    // }
 }
 
-
-          // String hostHeader = HttpRequest.getHeaderIgnoreCase(ctx.request.getHeaders(), "Host");
-
-                // ctx.chosenServer =HttpRequest.chooseServerByHost(
-                //         ctx.listenerInfo.serverCfgs, hostHeader
-                // );
-
-                // set max body size based on chosen server
-                // System.out.println("max body size: "+ctx.chosenServer.clientMaxBodySize);
-                // long maxBodySize = ctx.chosenServer != null ? ctx.chosenServer.clientMaxBodySize : 1_000_000;
-                // ctx.request.setMaxBodyBytes(maxBodySize);
+// String hostHeader = HttpRequest.getHeaderIgnoreCase(ctx.request.getHeaders(), "Host");
+// ctx.chosenServer =HttpRequest.chooseServerByHost(
+    //         ctx.listenerInfo.serverCfgs, hostHeader
+    // );
+    // set max body size based on chosen server
+    // System.out.println("max body size: "+ctx.chosenServer.clientMaxBodySize);
+    // long maxBodySize = ctx.chosenServer != null ? ctx.chosenServer.clientMaxBodySize : 1_000_000;
+    // ctx.request.setMaxBodyBytes(maxBodySize);
+    
+    
+        // private static AppConfig.ServerConfig chooseServerByHost(
+        //         List<AppConfig.ServerConfig> cfgs, String hostHeader) {
+        //     String host = normalizeHost(hostHeader);
+        //     // search for matching server name in Host header
+        //     if (host != null) {
+        //         for (AppConfig.ServerConfig sc : cfgs) {
+        //             if (sc.name != null && host.equals(sc.name.toLowerCase())) {
+        //                 return sc;
+        //             }
+        //         }
+        //     }
+        //     // serch for default server
+        //     for (AppConfig.ServerConfig sc : cfgs) {
+        //         if (sc.defaultServer) {
+        //             return sc;
+        //         }
+        //     }
+        //     // final fallback to first server
+        //     return cfgs.isEmpty() ? null : cfgs.get(0);
+        // }
+        // private static String normalizeHost(String hostHeader) {
+        //     if (hostHeader == null) {
+        //         return null;
+        //     }
+        //     String h = hostHeader.trim().toLowerCase();
+        //     int idx = h.indexOf(':');
+        //     if (idx != -1) {
+        //         h = h.substring(0, idx);
+        //     }
+        //     // System.err.println("Host header: " + hostHeader + " → normalized: " + h);
+        //     return h;
+        // }

@@ -1,15 +1,11 @@
 package http;
 
-import java.io.BufferedOutputStream;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import utils.json.AppConfig;
 
 public class HttpRequest {
@@ -26,7 +22,7 @@ public class HttpRequest {
 
     private State state = State.REQ_LINE_AND_HEADERS;
 
-    private  final List<AppConfig.ServerConfig> serverCfgs = new ArrayList<>();
+    private final List<AppConfig.ServerConfig> serverCfgs = new ArrayList<>();
     private AppConfig.ServerConfig chosenServer = null;
 
     private final ByteArray headerBytes = new ByteArray(8192);
@@ -42,19 +38,18 @@ public class HttpRequest {
     private long bodyWritten = 0;
 
     private Path bodyFile;
-    private OutputStream bodyOut;
+    private FileChannel bodyChannel; // ✅ تغيير من OutputStream إلى FileChannel
 
     private final ByteArray lineBuf = new ByteArray(128);
     private int currentChunkSize = -1;
     private int remainingChunkBytes = 0;
 
+    // ✅ للتحكم في معدل الكتابة
+    private static final int MAX_WRITE_PER_CALL = 8192; // 8KB max per call
+
     public HttpRequest(List<AppConfig.ServerConfig> serverCfgs) {
         this.serverCfgs.addAll(serverCfgs);
     }
-
-    // public void setMaxBodyBytes(long max) {
-    //     this.maxBodyBytes = max;
-    // }
 
     public void consume(ByteBuffer buf) throws IOException {
         while (buf.hasRemaining() && state != State.DONE) {
@@ -130,14 +125,10 @@ public class HttpRequest {
 
         for (int i = 1; i < lines.length; i++) {
             String line = lines[i];
-            if (line.isEmpty()) {
-                break;
-            }
+            if (line.isEmpty()) break;
 
             int idx = line.indexOf(':');
-            if (idx == -1) {
-                continue;
-            }
+            if (idx == -1) continue;
 
             String k = line.substring(0, idx).trim();
             String v = line.substring(idx + 1).trim();
@@ -152,8 +143,9 @@ public class HttpRequest {
                 this.serverCfgs, hostHeader
         );
 
-        System.out.println("Chosen server: " + (this.chosenServer != null ? this.chosenServer.name : "null"));
-        this.maxBodyBytes = (this.chosenServer != null) ? this.chosenServer.clientMaxBodySize : 1048576L; // default 1 MB
+        this.maxBodyBytes = (this.chosenServer != null) 
+            ? this.chosenServer.clientMaxBodySize 
+            : 1048576L; // default 1 MB
 
         String te = getHeaderIgnoreCase(headers, "Transfer-Encoding");
         if (te != null && te.equalsIgnoreCase("chunked")) {
@@ -179,7 +171,6 @@ public class HttpRequest {
                 return;
             }
             if (contentLength > maxBodyBytes) {
-                System.out.println("Request body too large: " + contentLength + " bytes " + " (max allowed: " + maxBodyBytes + " bytes)");
                 throw new IllegalArgumentException("413 Payload Too Large");
             }
             openBodyFile();
@@ -191,24 +182,21 @@ public class HttpRequest {
     }
 
     private void openBodyFile() throws IOException {
-        System.err.println("⚠️ Opening temporary file for request body...");
-        if (bodyOut != null) {
-            return;
-        }
-        System.err.println("⚠️ Temporary file opened: " + bodyFile);
-        
-        // Path tempDir = Paths.get(System.getProperty("user.home/Desktop/"), "myapp_tmp");
+        if (bodyChannel != null) return;
 
         Path tempDir = Paths.get("myapp_tmp");
         if (!Files.exists(tempDir)) {
             Files.createDirectories(tempDir);
         }
 
-        // خلق temp file داخل هداك folder
         bodyFile = Files.createTempFile(tempDir, "reqbody_", ".bin");
 
-        bodyOut = new BufferedOutputStream(
-                Files.newOutputStream(bodyFile, StandardOpenOption.WRITE)
+        // ✅ استخدام FileChannel مباشرة (non-blocking)
+        bodyChannel = FileChannel.open(
+            bodyFile,
+            StandardOpenOption.WRITE,
+            StandardOpenOption.CREATE,
+            StandardOpenOption.TRUNCATE_EXISTING
         );
     }
 
@@ -219,7 +207,10 @@ public class HttpRequest {
             return;
         }
 
+        // ✅ نكتب فقط كمية محدودة في كل مرة
         int toWrite = (int) Math.min(remaining, buf.remaining());
+        toWrite = Math.min(toWrite, MAX_WRITE_PER_CALL);
+
         byte[] chunk = new byte[toWrite];
         buf.get(chunk);
         writeBodyBytes(chunk, 0, toWrite);
@@ -273,6 +264,8 @@ public class HttpRequest {
 
     private void readChunkData(ByteBuffer buf) throws IOException {
         int toWrite = Math.min(remainingChunkBytes, buf.remaining());
+        toWrite = Math.min(toWrite, MAX_WRITE_PER_CALL); // ✅ حد الكتابة
+        
         if (toWrite > 0) {
             byte[] chunk = new byte[toWrite];
             buf.get(chunk);
@@ -286,9 +279,7 @@ public class HttpRequest {
     }
 
     private void readChunkDataCrlf(ByteBuffer buf) {
-        if (buf.remaining() < 2) {
-            return;
-        }
+        if (buf.remaining() < 2) return;
 
         byte r = buf.get();
         byte n = buf.get();
@@ -325,29 +316,35 @@ public class HttpRequest {
         if (bodyWritten > maxBodyBytes) {
             throw new IllegalArgumentException("413 Payload Too Large");
         }
-        bodyOut.write(b, off, len);
+
+        // ✅ كتابة مباشرة باستخدام FileChannel
+        ByteBuffer buffer = ByteBuffer.wrap(b, off, len);
+        while (buffer.hasRemaining()) {
+            bodyChannel.write(buffer);
+        }
     }
 
     private void finishBody() throws IOException {
-        if (bodyOut != null) {
-            bodyOut.flush();
-            bodyOut.close();
-            bodyOut = null;
+        if (bodyChannel != null) {
+            bodyChannel.force(false); // sync to disk
+            bodyChannel.close();
+            bodyChannel = null;
         }
         state = State.DONE;
     }
 
     public void closeBodyStreamIfOpen() throws IOException {
-        if (bodyOut != null) {
-            bodyOut.flush();
-            bodyOut.close();
-            bodyOut = null;
+        if (bodyChannel != null) {
+            try {
+                bodyChannel.close();
+            } catch (Exception ignored) {}
+            bodyChannel = null;
         }
+        
         if (bodyFile != null && Files.exists(bodyFile)) {
             try {
                 Files.delete(bodyFile);
-            } catch (Exception ignored) {
-            }
+            } catch (Exception ignored) {}
         }
     }
 
@@ -355,38 +352,17 @@ public class HttpRequest {
         return state == State.DONE;
     }
 
-    public String getMethod() {
-        return method;
-    }
-
-    public String getPath() {
-        return path;
-    }
-
-    public String getVersion() {
-        return version;
-    }
-
-    public Map<String, String> getHeaders() {
-        return headers;
-    }
-
-    public Path getBodyFile() {
-        return bodyFile;
-    }
-
-    public long getContentLength() {
-        return contentLength;
-    }
-
-    public boolean isChunked() {
-        return isChunked;
-    }
+    public String getMethod() { return method; }
+    public String getPath() { return path; }
+    public String getVersion() { return version; }
+    public Map<String, String> getHeaders() { return headers; }
+    public Path getBodyFile() { return bodyFile; }
+    public long getContentLength() { return contentLength; }
+    public boolean isChunked() { return isChunked; }
+    public AppConfig.ServerConfig getChosenServer() { return chosenServer; }
 
     public static String getHeaderIgnoreCase(Map<String, String> headers, String key) {
-        if (headers == null || key == null) {
-            return null;
-        }
+        if (headers == null || key == null) return null;
 
         for (String k : headers.keySet()) {
             if (k != null && k.equalsIgnoreCase(key)) {
@@ -401,7 +377,6 @@ public class HttpRequest {
 
         String host = normalizeHost(hostHeader);
 
-        // search for matching server name in Host header
         if (host != null) {
             for (AppConfig.ServerConfig sc : cfgs) {
                 if (sc.name != null && host.equals(sc.name)) {
@@ -410,36 +385,25 @@ public class HttpRequest {
             }
         }
 
-        // serch for default server
         for (AppConfig.ServerConfig sc : cfgs) {
-            if (sc.defaultServer) {
-                return sc;
-            }
+            if (sc.defaultServer) return sc;
         }
 
-        // final fallback to first server
         return cfgs.isEmpty() ? null : cfgs.get(0);
     }
 
-    public AppConfig.ServerConfig getChosenServer() {
-        return this.chosenServer;
-    }
-
     private static String normalizeHost(String hostHeader) {
-        if (hostHeader == null) {
-            return null;
-        }
+        if (hostHeader == null) return null;
+        
         String h = hostHeader.trim().toLowerCase();
         int idx = h.indexOf(':');
         if (idx != -1) {
             h = h.substring(0, idx);
         }
-        // System.err.println("Host header: " + hostHeader + " → normalized: " + h);
         return h;
     }
 
     private static final class ByteArray {
-
         private byte[] a;
         private int n;
 
@@ -449,19 +413,12 @@ public class HttpRequest {
         }
 
         void add(byte b) {
-            if (n == a.length) {
-                a = grow(a);
-            }
+            if (n == a.length) a = grow(a);
             a[n++] = b;
         }
 
-        int size() {
-            return n;
-        }
-
-        byte get(int i) {
-            return a[i];
-        }
+        int size() { return n; }
+        byte get(int i) { return a[i]; }
 
         byte[] toArray(int from, int to) {
             int len = Math.max(0, to - from);
@@ -470,9 +427,7 @@ public class HttpRequest {
             return out;
         }
 
-        void clear() {
-            n = 0;
-        }
+        void clear() { n = 0; }
 
         private static byte[] grow(byte[] old) {
             byte[] nw = new byte[old.length * 2];
