@@ -196,8 +196,17 @@ public class HttpRequest {
             return;
         }
         System.err.println("⚠️ Temporary file opened: " + bodyFile);
+        
+        // Path tempDir = Paths.get(System.getProperty("user.home/Desktop/"), "myapp_tmp");
 
-        bodyFile = Files.createTempFile("reqbody_", ".bin");
+        Path tempDir = Paths.get("myapp_tmp");
+        if (!Files.exists(tempDir)) {
+            Files.createDirectories(tempDir);
+        }
+
+        // خلق temp file داخل هداك folder
+        bodyFile = Files.createTempFile(tempDir, "reqbody_", ".bin");
+
         bodyOut = new BufferedOutputStream(
                 Files.newOutputStream(bodyFile, StandardOpenOption.WRITE)
         );

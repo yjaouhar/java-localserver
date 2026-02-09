@@ -24,7 +24,7 @@
                     "path": "/",
                     "root": "resources/",
                     "methods": [
-                        "GET"
+                        "GET","jhjj"
                     ],
                     "index": "index.html",
                     "directory_listing": true
@@ -34,8 +34,7 @@
                     "root": "resources/uploads",
                     "methods": [
                         "POST",
-                        "GET",
-                        "pff"
+                        "GET"
                     ],
                     "upload_dir": "resources/uploads",
                     "directory_listing": true

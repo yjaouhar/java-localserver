@@ -90,7 +90,7 @@ public class Server {
             int ready = selector.select(200);
 
             // check timeouts
-            // checkTimeouts(selector);
+            checkTimeouts(selector);
 
             if (ready == 0) {
                 continue;
