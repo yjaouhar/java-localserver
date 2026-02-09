@@ -1,12 +1,15 @@
 package utils.json;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-
 public class ConfigMapper {
 
-    public  ConfigMapper() {}
+    private static List<String> servernames = new ArrayList<>();
+
+    public ConfigMapper() {
+    }
 
     public static AppConfig buildAppConfig(Map<String, Object> obj) {
         AppConfig cfg = new AppConfig();
@@ -44,7 +47,20 @@ public class ConfigMapper {
     private static AppConfig.ServerConfig parseServer(Map<String, Object> s, String path) {
         AppConfig.ServerConfig sc = new AppConfig.ServerConfig();
 
-        sc.name = asString(required(s, "name", path), path + ".name");
+        String name = asString(required(s, "name", path), path + ".name");
+        name = name.trim().toLowerCase();
+        if (name.isEmpty()) {
+            throw new IllegalArgumentException("Server name cannot be empty at " + path + ".name");
+        }
+        if (name.contains(" ")) {
+            throw new IllegalArgumentException("Server name cannot contain spaces at " + path + ".name");
+        }
+        if (servernames.contains(name)) {
+            throw new IllegalArgumentException("Duplicate server name at " + path + ".name: " + name);
+        }
+        servernames.add(name);
+        sc.name = name;
+
         String host = asString(required(s, "host", path), path + ".host");
 
         if (!util.isValidIPv4(host)) {
@@ -53,6 +69,9 @@ public class ConfigMapper {
         sc.host = host;
 
         List<Object> ports = asArray(required(s, "ports", path), path + ".ports");
+        if (ports.isEmpty()) {
+            throw new IllegalArgumentException("At least one port is required at " + path + ".ports");
+        }
         for (int i = 0; i < ports.size(); i++) {
             int port = asInt(ports.get(i), path + ".ports[" + i + "]");
             if (sc.ports.contains(port)) {
@@ -137,45 +156,61 @@ public class ConfigMapper {
 
     @SuppressWarnings("unchecked")
     private static Map<String, Object> asObject(Object v, String path) {
-        if (v instanceof Map) return (Map<String, Object>) v;
+        if (v instanceof Map) {
+            return (Map<String, Object>) v;
+        }
         throw new IllegalArgumentException("Expected object at " + path);
     }
 
     @SuppressWarnings("unchecked")
     private static List<Object> asArray(Object v, String path) {
-        if (v instanceof List) return (List<Object>) v;
+        if (v instanceof List) {
+            return (List<Object>) v;
+        }
         throw new IllegalArgumentException("Expected array at " + path);
     }
 
     private static String asString(Object v, String path) {
-        if (v instanceof String) return (String) v;
+        if (v instanceof String) {
+            return (String) v;
+        }
         throw new IllegalArgumentException("Expected string at " + path);
     }
 
     private static boolean asBoolean(Object v, String path) {
-        if (v instanceof Boolean) return (Boolean) v;
+        if (v instanceof Boolean) {
+            return (Boolean) v;
+        }
         throw new IllegalArgumentException("Expected boolean at " + path);
     }
 
     private static int asInt(Object v, String path) {
         if (v instanceof Long) {
             long x = (Long) v;
-            if (x > Integer.MAX_VALUE) throw new IllegalArgumentException("Integer overflow at " + path);
+            if (x > Integer.MAX_VALUE) {
+                throw new IllegalArgumentException("Integer overflow at " + path);
+            }
             return (int) x;
         }
         throw new IllegalArgumentException("Expected integer at " + path);
     }
 
     private static long asLong(Object v, String path) {
-        if (v instanceof Long) return (Long) v;
+        if (v instanceof Long) {
+            return (Long) v;
+        }
         throw new IllegalArgumentException("Expected integer/long at " + path);
     }
 
     private static int parseIntKey(String key, String path) {
-        if (key == null || key.isEmpty()) throw new IllegalArgumentException("Empty key at " + path);
+        if (key == null || key.isEmpty()) {
+            throw new IllegalArgumentException("Empty key at " + path);
+        }
         for (int i = 0; i < key.length(); i++) {
             char c = key.charAt(i);
-            if (c < '0' || c > '9') throw new IllegalArgumentException("Non-numeric key '" + key + "' at " + path);
+            if (c < '0' || c > '9') {
+                throw new IllegalArgumentException("Non-numeric key '" + key + "' at " + path);
+            }
         }
         try {
             return Integer.parseInt(key);
@@ -184,4 +219,3 @@ public class ConfigMapper {
         }
     }
 }
-

@@ -33,9 +33,13 @@
                     "path": "/upload",
                     "root": "resources/uploads",
                     "methods": [
-                        "POST"
+                        "POST",
+                        "GET",
+                        "pff"
                     ],
-                    "upload_dir": "resources/uploads"
+                    "upload_dir": "resources/uploads",
+                    "directory_listing": true
+
                 },
                 {
                     "path": "/delete",

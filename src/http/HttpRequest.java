@@ -6,8 +6,11 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import utils.json.AppConfig;
 
 public class HttpRequest {
 
@@ -23,6 +26,9 @@ public class HttpRequest {
 
     private State state = State.REQ_LINE_AND_HEADERS;
 
+    private  final List<AppConfig.ServerConfig> serverCfgs = new ArrayList<>();
+    private AppConfig.ServerConfig chosenServer = null;
+
     private final ByteArray headerBytes = new ByteArray(8192);
     private int headerEndIndex = -1;
 
@@ -30,9 +36,9 @@ public class HttpRequest {
     private String method, path, version;
 
     private boolean isChunked = false;
-    private long contentLength = 0; 
+    private long contentLength = 0;
 
-    private long maxBodyBytes = 1_000_000;
+    private long maxBodyBytes;
     private long bodyWritten = 0;
 
     private Path bodyFile;
@@ -42,9 +48,13 @@ public class HttpRequest {
     private int currentChunkSize = -1;
     private int remainingChunkBytes = 0;
 
-    public void setMaxBodyBytes(long max) {
-        this.maxBodyBytes = max;
+    public HttpRequest(List<AppConfig.ServerConfig> serverCfgs) {
+        this.serverCfgs.addAll(serverCfgs);
     }
+
+    // public void setMaxBodyBytes(long max) {
+    //     this.maxBodyBytes = max;
+    // }
 
     public void consume(ByteBuffer buf) throws IOException {
         while (buf.hasRemaining() && state != State.DONE) {
@@ -97,10 +107,10 @@ public class HttpRequest {
     }
 
     private void parseHeaders() {
-        String headerText = new String(headerBytes.toArray(0, headerEndIndex), 
-                                      StandardCharsets.ISO_8859_1);
+        String headerText = new String(headerBytes.toArray(0, headerEndIndex),
+                StandardCharsets.ISO_8859_1);
         String[] lines = headerText.split("\r\n");
-        
+
         if (lines.length == 0) {
             throw new IllegalArgumentException("400 Bad request");
         }
@@ -110,22 +120,25 @@ public class HttpRequest {
             throw new IllegalArgumentException("400 Bad request line");
         }
 
-        method = reqLine[0].toUpperCase(); // ✅ تحويل لـ uppercase
+        method = reqLine[0].toUpperCase();
         path = reqLine[1];
         version = reqLine[2];
 
-        // ✅ التحقق من الـ HTTP version
         if (!version.startsWith("HTTP/")) {
             throw new IllegalArgumentException("400 Bad HTTP version");
         }
 
         for (int i = 1; i < lines.length; i++) {
             String line = lines[i];
-            if (line.isEmpty()) break;
-            
+            if (line.isEmpty()) {
+                break;
+            }
+
             int idx = line.indexOf(':');
-            if (idx == -1) continue;
-            
+            if (idx == -1) {
+                continue;
+            }
+
             String k = line.substring(0, idx).trim();
             String v = line.substring(idx + 1).trim();
             headers.put(k, v);
@@ -133,6 +146,15 @@ public class HttpRequest {
     }
 
     private void decideBodyMode() throws IOException {
+        String hostHeader = HttpRequest.getHeaderIgnoreCase(this.getHeaders(), "Host");
+
+        this.chosenServer = HttpRequest.chooseServerByHost(
+                this.serverCfgs, hostHeader
+        );
+
+        System.out.println("Chosen server: " + (this.chosenServer != null ? this.chosenServer.name : "null"));
+        this.maxBodyBytes = (this.chosenServer != null) ? this.chosenServer.clientMaxBodySize : 1048576L; // default 1 MB
+
         String te = getHeaderIgnoreCase(headers, "Transfer-Encoding");
         if (te != null && te.equalsIgnoreCase("chunked")) {
             isChunked = true;
@@ -144,11 +166,11 @@ public class HttpRequest {
         String cl = getHeaderIgnoreCase(headers, "Content-Length");
         if (cl != null) {
             try {
-                contentLength = Long.parseLong(cl.trim()); // ✅ استخدام Long
+                contentLength = Long.parseLong(cl.trim());
             } catch (NumberFormatException e) {
                 throw new IllegalArgumentException("400 Bad Content-Length");
             }
-            
+
             if (contentLength < 0) {
                 throw new IllegalArgumentException("400 Bad Content-Length");
             }
@@ -170,13 +192,14 @@ public class HttpRequest {
 
     private void openBodyFile() throws IOException {
         System.err.println("⚠️ Opening temporary file for request body...");
-        if (bodyOut != null) return;
+        if (bodyOut != null) {
+            return;
+        }
         System.err.println("⚠️ Temporary file opened: " + bodyFile);
-        
-        
+
         bodyFile = Files.createTempFile("reqbody_", ".bin");
         bodyOut = new BufferedOutputStream(
-            Files.newOutputStream(bodyFile, StandardOpenOption.WRITE)
+                Files.newOutputStream(bodyFile, StandardOpenOption.WRITE)
         );
     }
 
@@ -204,11 +227,10 @@ public class HttpRequest {
 
             int n = lineBuf.size();
             if (n >= 2 && lineBuf.get(n - 2) == '\r' && lineBuf.get(n - 1) == '\n') {
-                String line = new String(lineBuf.toArray(0, n - 2), 
-                                        StandardCharsets.ISO_8859_1).trim();
+                String line = new String(lineBuf.toArray(0, n - 2),
+                        StandardCharsets.ISO_8859_1).trim();
                 lineBuf.clear();
 
-                // ✅ معالجة chunk extensions
                 int semiIdx = line.indexOf(';');
                 if (semiIdx != -1) {
                     line = line.substring(0, semiIdx).trim();
@@ -255,15 +277,17 @@ public class HttpRequest {
     }
 
     private void readChunkDataCrlf(ByteBuffer buf) {
-        if (buf.remaining() < 2) return;
-        
+        if (buf.remaining() < 2) {
+            return;
+        }
+
         byte r = buf.get();
         byte n = buf.get();
-        
+
         if (r != '\r' || n != '\n') {
             throw new IllegalArgumentException("400 Bad chunk ending");
         }
-        
+
         state = State.CHUNK_SIZE_LINE;
     }
 
@@ -310,11 +334,11 @@ public class HttpRequest {
             bodyOut.close();
             bodyOut = null;
         }
-        // ✅ حذف الملف المؤقت
         if (bodyFile != null && Files.exists(bodyFile)) {
             try {
                 Files.delete(bodyFile);
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -329,8 +353,8 @@ public class HttpRequest {
     public String getPath() {
         return path;
     }
-    
-    public String getVersion() { // ✅ جديد
+
+    public String getVersion() {
         return version;
     }
 
@@ -341,18 +365,20 @@ public class HttpRequest {
     public Path getBodyFile() {
         return bodyFile;
     }
-    
-    public long getContentLength() { // ✅ جديد
+
+    public long getContentLength() {
         return contentLength;
     }
-    
-    public boolean isChunked() { // ✅ جديد
+
+    public boolean isChunked() {
         return isChunked;
     }
 
     public static String getHeaderIgnoreCase(Map<String, String> headers, String key) {
-        if (headers == null || key == null) return null;
-        
+        if (headers == null || key == null) {
+            return null;
+        }
+
         for (String k : headers.keySet()) {
             if (k != null && k.equalsIgnoreCase(key)) {
                 return headers.get(k);
@@ -361,8 +387,50 @@ public class HttpRequest {
         return null;
     }
 
-    // ✅ ByteArray helper class
+    public static AppConfig.ServerConfig chooseServerByHost(
+            List<AppConfig.ServerConfig> cfgs, String hostHeader) {
+
+        String host = normalizeHost(hostHeader);
+
+        // search for matching server name in Host header
+        if (host != null) {
+            for (AppConfig.ServerConfig sc : cfgs) {
+                if (sc.name != null && host.equals(sc.name)) {
+                    return sc;
+                }
+            }
+        }
+
+        // serch for default server
+        for (AppConfig.ServerConfig sc : cfgs) {
+            if (sc.defaultServer) {
+                return sc;
+            }
+        }
+
+        // final fallback to first server
+        return cfgs.isEmpty() ? null : cfgs.get(0);
+    }
+
+    public AppConfig.ServerConfig getChosenServer() {
+        return this.chosenServer;
+    }
+
+    private static String normalizeHost(String hostHeader) {
+        if (hostHeader == null) {
+            return null;
+        }
+        String h = hostHeader.trim().toLowerCase();
+        int idx = h.indexOf(':');
+        if (idx != -1) {
+            h = h.substring(0, idx);
+        }
+        // System.err.println("Host header: " + hostHeader + " → normalized: " + h);
+        return h;
+    }
+
     private static final class ByteArray {
+
         private byte[] a;
         private int n;
 

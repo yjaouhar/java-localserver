@@ -27,7 +27,6 @@ public class Server {
     }
 
     static class ConnCtx {
-
         final ListenerInfo listenerInfo;
         final SocketChannel client;
         final ByteBuffer readBuf;
@@ -39,11 +38,11 @@ public class Server {
         boolean responseReady;
         AppConfig.ServerConfig chosenServer;
 
-        ConnCtx(ListenerInfo info, SocketChannel client, int bufSize) {
+        ConnCtx(ListenerInfo info, SocketChannel client, int bufSize,List<AppConfig.ServerConfig> serverCfgs ) {
             this.listenerInfo = info;
             this.client = client;
             this.readBuf = ByteBuffer.allocate(bufSize);
-            this.request = new HttpRequest();
+            this.request = new HttpRequest(serverCfgs);
             this.connectedAt = System.currentTimeMillis();
             this.lastActivityAt = this.connectedAt;
             this.responseReady = false;
@@ -115,7 +114,7 @@ public class Server {
                         onWrite(key);
                     }
                 } catch (Exception e) {
-                    System.err.println("⚠ Event error: " + e.getMessage());
+                    System.err.println("Event error: " + e.getMessage());
                     safeCleanup(key);
                 }
             }
@@ -133,7 +132,7 @@ public class Server {
 
         client.configureBlocking(false);
 
-        ConnCtx ctx = new ConnCtx(info, client, 8192);
+        ConnCtx ctx = new ConnCtx(info, client, 8192, info.serverCfgs);
 
         SelectionKey ckey = client.register(selector, SelectionKey.OP_READ);
         ckey.attach(ctx);
@@ -168,16 +167,9 @@ public class Server {
             ctx.request.consume(ctx.readBuf);
 
             if (ctx.request.isRequestCompleted()) {
-                String hostHeader = HttpRequest.getHeaderIgnoreCase(ctx.request.getHeaders(), "Host");
+      
+                ctx.chosenServer = ctx.request.getChosenServer();
 
-                ctx.chosenServer = chooseServerByHost(
-                        ctx.listenerInfo.serverCfgs, hostHeader
-                );
-
-                // set max body size based on chosen server
-                System.out.println("max body size: "+ctx.chosenServer.clientMaxBodySize);
-                long maxBodySize = ctx.chosenServer != null ? ctx.chosenServer.clientMaxBodySize : 1_000_000;
-                ctx.request.setMaxBodyBytes(maxBodySize);
 
                 // change interest to write
                 key.interestOps(SelectionKey.OP_WRITE);
@@ -186,9 +178,10 @@ public class Server {
         } catch (IllegalArgumentException e) {
             //error from request parsing (e.g. headers too large, invalid format, etc)
             handleHttpError(key, ctx, e.getMessage());
+
+            // http.HttpResponse.ErrorResponse(400, "Bad Request", "", "").toByteBuffer();
         } catch (Exception e) {
-            // other errors (e.g. IO errors)
-            System.err.println("⚠ Read error: " + e.getMessage());
+            System.err.println(" Read error: " + e.getMessage());
             handleHttpError(key, ctx, "500 Internal Server Error");
         }
     }
@@ -253,7 +246,6 @@ public class Server {
         }
     }
 
-    // ✅ معالجة أخطاء HTTP
     private void handleHttpError(SelectionKey key, ConnCtx ctx, String error) {
         try {
             String[] parts = error.split(" ", 2);
@@ -276,22 +268,6 @@ public class Server {
         } catch (Exception e) {
             safeCleanup(key);
         }
-    }
-
-    private String buildSimpleResponse(ConnCtx ctx) {
-        String body = "<html><body>"
-                + "<h1>It Works!</h1>"
-                + "<p>Method: " + ctx.request.getMethod() + "</p>"
-                + "<p>Path: " + ctx.request.getPath() + "</p>"
-                + "<p>Server: " + (ctx.chosenServer != null ? ctx.chosenServer.name : "default") + "</p>"
-                + "</body></html>";
-
-        return "HTTP/1.1 200 OK\r\n"
-                + "Content-Type: text/html; charset=UTF-8\r\n"
-                + "Content-Length: " + body.length() + "\r\n"
-                + "Connection: close\r\n"
-                + "\r\n"
-                + body;
     }
 
     private void cleanup(SelectionKey key, SocketChannel client, ConnCtx ctx) {
@@ -325,41 +301,53 @@ public class Server {
         }
     }
 
-    private static AppConfig.ServerConfig chooseServerByHost(
-            List<AppConfig.ServerConfig> cfgs, String hostHeader) {
+    // private static AppConfig.ServerConfig chooseServerByHost(
+    //         List<AppConfig.ServerConfig> cfgs, String hostHeader) {
 
-        String host = normalizeHost(hostHeader);
+    //     String host = normalizeHost(hostHeader);
 
-        // search for matching server name in Host header
-        if (host != null) {
-            for (AppConfig.ServerConfig sc : cfgs) {
-                if (sc.name != null && host.equals(sc.name.toLowerCase())) {
-                    return sc;
-                }
-            }
-        }
+    //     // search for matching server name in Host header
+    //     if (host != null) {
+    //         for (AppConfig.ServerConfig sc : cfgs) {
+    //             if (sc.name != null && host.equals(sc.name.toLowerCase())) {
+    //                 return sc;
+    //             }
+    //         }
+    //     }
 
-        // serch for default server
-        for (AppConfig.ServerConfig sc : cfgs) {
-            if (sc.defaultServer) {
-                return sc;
-            }
-        }
+    //     // serch for default server
+    //     for (AppConfig.ServerConfig sc : cfgs) {
+    //         if (sc.defaultServer) {
+    //             return sc;
+    //         }
+    //     }
 
-        // final fallback to first server
-        return cfgs.isEmpty() ? null : cfgs.get(0);
-    }
+    //     // final fallback to first server
+    //     return cfgs.isEmpty() ? null : cfgs.get(0);
+    // }
 
-    private static String normalizeHost(String hostHeader) {
-        if (hostHeader == null) {
-            return null;
-        }
-        String h = hostHeader.trim().toLowerCase();
-        int idx = h.indexOf(':');
-        if (idx != -1) {
-            h = h.substring(0, idx);
-        }
-        // System.err.println("Host header: " + hostHeader + " → normalized: " + h);
-        return h;
-    }
+    // private static String normalizeHost(String hostHeader) {
+    //     if (hostHeader == null) {
+    //         return null;
+    //     }
+    //     String h = hostHeader.trim().toLowerCase();
+    //     int idx = h.indexOf(':');
+    //     if (idx != -1) {
+    //         h = h.substring(0, idx);
+    //     }
+    //     // System.err.println("Host header: " + hostHeader + " → normalized: " + h);
+    //     return h;
+    // }
 }
+
+
+          // String hostHeader = HttpRequest.getHeaderIgnoreCase(ctx.request.getHeaders(), "Host");
+
+                // ctx.chosenServer =HttpRequest.chooseServerByHost(
+                //         ctx.listenerInfo.serverCfgs, hostHeader
+                // );
+
+                // set max body size based on chosen server
+                // System.out.println("max body size: "+ctx.chosenServer.clientMaxBodySize);
+                // long maxBodySize = ctx.chosenServer != null ? ctx.chosenServer.clientMaxBodySize : 1_000_000;
+                // ctx.request.setMaxBodyBytes(maxBodySize);

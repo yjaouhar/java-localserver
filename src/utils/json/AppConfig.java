@@ -25,7 +25,7 @@ public class AppConfig {
         public String host;
         public List<Integer> ports = new ArrayList<>();
         public boolean defaultServer;
-        public long clientMaxBodySize;
+        public long clientMaxBodySize = 1048576L; // default 1 MB
         public Map<Integer, String> errorPages = new HashMap<>();
         public List<RouteConfig> routes = new ArrayList<>();
     }
