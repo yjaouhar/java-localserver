@@ -345,8 +345,8 @@ public class HttpRequest {
         if (bodyChannel != null) {
             try {
                 bodyChannel.close();
-            } catch (Exception ignored) {
-            }
+            } catch (Exception ignored) {}
+            
             bodyChannel = null;
         }
 
