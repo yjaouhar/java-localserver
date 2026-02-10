@@ -1,0 +1,9 @@
+--------------------------QvsbmS4Yu35pOCsnxVNaB4
+Content-Disposition: form-data; name="file"
+
+-F ff=gg @t.txt
+--------------------------QvsbmS4Yu35pOCsnxVNaB4
+Content-Disposition: form-data; name="nn"
+
+yass
+--------------------------QvsbmS4Yu35pOCsnxVNaB4--
