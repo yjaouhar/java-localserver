@@ -14,18 +14,26 @@ public class ConfigMapper {
     public static AppConfig buildAppConfig(Map<String, Object> obj) {
         AppConfig cfg = new AppConfig();
 
-        if (obj.containsKey("limits")) {
-            Map<String, Object> limits = asObject(obj.get("limits"), "limits");
-            if (limits.containsKey("max_header_bytes")) {
-                cfg.limits.maxHeaderBytes = asInt(limits.get("max_header_bytes"), "limits.max_header_bytes");
-            }
-        }
+        // if (obj.containsKey("limits")) {
+        //     Map<String, Object> limits = asObject(obj.get("limits"), "limits");
+        //     if (limits.containsKey("max_header_bytes")) {
+        //         cfg.limits.maxHeaderBytes = asInt(limits.get("max_header_bytes"), "limits.max_header_bytes");
+        //     }
+        //     if (limits.containsKey("max_body_bytes")) {
+        //         cfg.limits.maxBodyBytes = asInt(limits.get("max_body_bytes"), "limits.max_body_bytes");
+        //     }
+        // }
 
         if (obj.containsKey("timeouts")) {
             Map<String, Object> t = asObject(obj.get("timeouts"), "timeouts");
             if (t.containsKey("body_ms")) {
                 cfg.timeouts.bodyMs = asInt(t.get("body_ms"), "timeouts.body_ms");
             }
+
+            if (t.containsKey("header_ms")) {
+                cfg.timeouts.headerMs = asInt(t.get("header_ms"), "timeouts.header_ms");
+            }
+
             if (t.containsKey("idle_keep_alive_ms")) {
                 cfg.timeouts.idleKeepAliveMs = asInt(t.get("idle_keep_alive_ms"), "timeouts.idle_keep_alive_ms");
             }

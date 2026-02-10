@@ -5,19 +5,16 @@ import java.util.*;
 public class AppConfig {
 
     public Timeouts timeouts = new Timeouts();
-    public Limits limits = new Limits();
+    // public Limits limits = new Limits();
     public List<ServerConfig> servers = new ArrayList<>();
 
     public static class Timeouts {
 
-        public final int headerMs = 10000;
+        public int headerMs = 10000;
         public int bodyMs = 30000;
         public int idleKeepAliveMs = 60000;
     }
 
-    public static class Limits {
-        public int maxHeaderBytes;
-    }
 
     public static class ServerConfig {
 
