@@ -109,10 +109,16 @@ public class ConfigMapper {
             rc.root = asString(r.get("root"), path + ".root");
         }
 
+        // List<String> allowedMethods = List.of("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS");
+        // List<Object> ms = new ArrayList<>();
+        boolean hasMesthodPost = false;
         if (r.containsKey("methods")) {
             List<Object> ms = asArray(r.get("methods"), path + ".methods");
             for (int i = 0; i < ms.size(); i++) {
                 rc.methods.add(asString(ms.get(i), path + ".methods[" + i + "]"));
+                if ("POST".equals(rc.methods.get(rc.methods.size() - 1))) {
+                    hasMesthodPost = true;
+                }
             }
         }
 
@@ -122,6 +128,11 @@ public class ConfigMapper {
 
         if (r.containsKey("directory_listing")) {
             rc.directoryListing = asBoolean(r.get("directory_listing"), path + ".directory_listing");
+        }
+
+        System.out.println("hasMesthodPost: " + hasMesthodPost + "  containsKey uploadDir: " + r.containsKey("upload_dir"));
+        if (hasMesthodPost && !r.containsKey("upload_dir")) {
+            throw new IllegalArgumentException("upload_dir is required for POST method at " + path);
         }
 
         if (r.containsKey("upload_dir")) {
