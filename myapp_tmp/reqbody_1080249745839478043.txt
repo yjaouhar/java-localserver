@@ -1,9 +1,0 @@
---------------------------W21EbuhKnWhDqab4OMmoU8
-Content-Disposition: form-data; name="file"
-
--F ff=gg @Picsart_24-09-04_00-48-24-043.jpg
---------------------------W21EbuhKnWhDqab4OMmoU8
-Content-Disposition: form-data; name="nn"
-
-yass
---------------------------W21EbuhKnWhDqab4OMmoU8--

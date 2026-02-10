@@ -1,9 +1,0 @@
---------------------------Cz7iz0MQt24Cin2XlFo6TV
-Content-Disposition: form-data; name="file"
-
--F ff=gg @t.txt
---------------------------Cz7iz0MQt24Cin2XlFo6TV
-Content-Disposition: form-data; name="nn"
-
-yass
---------------------------Cz7iz0MQt24Cin2XlFo6TV--
