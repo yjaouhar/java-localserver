@@ -1,4 +1,3 @@
-
 import http.HttpRequest;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -9,6 +8,7 @@ import utils.json.AppConfig;
 public class Server {
 
     private final AppConfig appConfig;
+    private final handlers.CGIHandler cgiHandler;
 
     static class ListenerInfo {
 
@@ -74,6 +74,7 @@ public class Server {
 
     public Server(AppConfig appConfig) throws Exception {
         this.appConfig = appConfig;
+        this.cgiHandler = new handlers.CGIHandler(30); // 30 seconds timeout
 
         Selector selector = Selector.open();
         Map<Integer, SelectionKey> openedPorts = new HashMap<>();
@@ -106,6 +107,9 @@ public class Server {
         System.out.println("\n Server started successfully!\n");
 
         while (true) {
+            // MOHIM: Check pending CGI 9BEL select
+            checkAllPendingCGI(selector);
+            
             int ready = selector.select(200);
 
             // check timeouts
@@ -135,6 +139,20 @@ public class Server {
                 } catch (Exception e) {
                     System.err.println("Event error: " + e.getMessage());
                     safeCleanup(key);
+                }
+            }
+        }
+    }
+
+    private void checkAllPendingCGI(Selector selector) {
+        for (SelectionKey key : selector.keys()) {
+            if (key.isValid() && key.attachment() instanceof ConnCtx) {
+                ConnCtx ctx = (ConnCtx) key.attachment();
+                if (cgiHandler.hasPending(key)) {
+                    Map<Integer, String> errorPages = ctx.chosenServer != null && ctx.chosenServer.errorPages != null 
+                        ? ctx.chosenServer.errorPages 
+                        : new HashMap<>();
+                    cgiHandler.checkPendingCGI(key, errorPages);
                 }
             }
         }
@@ -239,8 +257,14 @@ public class Server {
 
         try {
             if (ctx.writeBuf == null) {
-                Router router = new Router(ctx.chosenServer, ctx.request);
+                Router router = new Router(ctx.chosenServer, ctx.request, cgiHandler, key);
                 http.HttpResponse resp = router.route();
+                
+                // Ila CGI, response ghadi yji later
+                if (resp == null) {
+                    return;
+                }
+                
                 ctx.writeBuf = resp.toByteBuffer();
             }
 
@@ -315,6 +339,9 @@ public class Server {
     }
 
     private void cleanup(SelectionKey key, SocketChannel client, ConnCtx ctx) {
+        // Cleanup CGI ila kan
+        cgiHandler.cleanup(key);
+        
         try {
             ctx.request.closeBodyStreamIfOpen();
         } catch (Exception ignored) {

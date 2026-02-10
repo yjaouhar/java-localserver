@@ -1,8 +1,8 @@
-
 import handlers.CGIHandler;
 import handlers.StaticFileHandler;
 import http.HttpRequest;
 import http.HttpResponse;
+import java.nio.channels.SelectionKey;
 import java.nio.file.Files;
 import java.util.List;
 import utils.json.AppConfig.RouteConfig;
@@ -12,10 +12,14 @@ public class Router {
 
     private final ServerConfig config;
     private final HttpRequest request;
+    private final CGIHandler cgiHandler;
+    private final SelectionKey clientKey;
 
-    public Router(ServerConfig config, HttpRequest request) {
+    public Router(ServerConfig config, HttpRequest request, CGIHandler cgiHandler, SelectionKey clientKey) {
         this.config = config;
         this.request = request;
+        this.cgiHandler = cgiHandler;
+        this.clientKey = clientKey;
     }
 
     public HttpResponse route() {
@@ -63,8 +67,16 @@ public class Router {
             return redirectResponse;
         }
 
+        // CGI handling - non-blocking
         if (matchedRoute.cgi != null) {
-            return CGIHandler.handleCGI(matchedRoute, request, config.errorPages);
+            try {
+                cgiHandler.executeCGI(clientKey, matchedRoute, request, config.errorPages);
+                // Return null - response ghadi yji later mn checkPendingCGI
+                return null;
+            } catch (Exception e) {
+                return HttpResponse.ErrorResponse(500, "Internal Server Error",
+                        "CGI execution failed: " + e.getMessage(), errorPage(500));
+            }
         }
 
         if ("POST".equals(method) && matchedRoute.uploadDir != null) {
