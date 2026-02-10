@@ -338,6 +338,7 @@ public class HttpRequest {
             try {
                 bodyChannel.close();
             } catch (Exception ignored) {}
+            
             bodyChannel = null;
         }
         

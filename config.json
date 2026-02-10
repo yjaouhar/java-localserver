@@ -24,10 +24,19 @@
                     "path": "/",
                     "root": "resources/",
                     "methods": [
-                        "GET","jhjj"
+                        "GET"
                     ],
                     "index": "index.html",
                     "directory_listing": true
+                },
+                  {
+                    "path": "/d",
+                    "root": "resources/",
+                    "methods": [
+                        "GET"
+                    ],
+                    "index": "index.html",
+                    "directory_listing": false
                 },
                 {
                     "path": "/upload",

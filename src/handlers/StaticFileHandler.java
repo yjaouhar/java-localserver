@@ -17,7 +17,7 @@ public class StaticFileHandler {
         }
 
         Path rootDir = Paths.get(route.root).toAbsolutePath();
-        Path requestedPath = rootDir.resolve(request.getPath().substring(route.path.length())).normalize();
+        Path requestedPath = rootDir;
 
         if (!requestedPath.startsWith(rootDir)) {
             return HttpResponse.ErrorResponse(403, "Forbidden", "Access denied", errorPages.get(403));
@@ -65,7 +65,6 @@ public class StaticFileHandler {
                 res.setHeaders("Content-Type", "text/html; charset=UTF-8");
                 res.setBody(listing.toString());
                 return res;
-
             } else if (Files.exists(requestedPath)) {
                 // single file
                 if (Files.isDirectory(requestedPath)) {
@@ -94,6 +93,7 @@ public class StaticFileHandler {
                 res.setBody(new String(fileBytes));
                 return res;
             } else {
+                 System.out.println("Directory listing for: " + requestedPath.toString());
                 return HttpResponse.ErrorResponse(404, "Not Found", "File not found", errorPages.get(404));
             }
 
