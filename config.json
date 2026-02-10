@@ -24,7 +24,8 @@
                     "path": "/",
                     "root": "resources/",
                     "methods": [
-                        "GET","jhjj"
+                        "GET",
+                        "jhjj"
                     ],
                     "index": "index.html",
                     "directory_listing": true
@@ -38,7 +39,6 @@
                     ],
                     "upload_dir": "resources/uploads",
                     "directory_listing": true
-
                 },
                 {
                     "path": "/delete",
@@ -51,8 +51,7 @@
                     "path": "/script.py",
                     "root": "resources/cgi-bin",
                     "methods": [
-                        "GET",
-                        "POST"
+                        "GET"
                     ],
                     "cgi": {
                         "extension": ".py",
