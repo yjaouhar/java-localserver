@@ -354,7 +354,7 @@ public class HttpRequest {
 
         if (bodyFile != null && Files.exists(bodyFile)) {
             try {
-                // Files.delete(bodyFile);
+                Files.delete(bodyFile);
             } catch (Exception ignored) {
             }
         }

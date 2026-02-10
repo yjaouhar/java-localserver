@@ -59,8 +59,10 @@
                     "path": "/script.py",
                     "root": "resources/cgi-bin",
                     "methods": [
-                        "GET"
+                        "GET",
+                        "POST"
                     ],
+                    "upload_dir": "resources/uploads",
                     "cgi": {
                         "extension": ".py",
                         "interpreter": "python3"
