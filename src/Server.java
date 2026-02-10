@@ -39,7 +39,6 @@ public class Server {
         boolean responseReady;
         AppConfig.ServerConfig chosenServer;
 
-        // ✅ Rate limiting للـ uploads
         long uploadBytesThisSecond = 0;
         long lastSecondTimestamp = 0;
         static final long MAX_UPLOAD_PER_SECOND = 5 * 1024 * 1024; // 5 MB/s
@@ -100,7 +99,7 @@ public class Server {
                 key.attach(info);
                 openedPorts.put(port, key);
 
-                System.out.println("✓ Listening on " + sc.host + ":" + port);
+                System.out.println(" Listening on " + sc.host + ":" + port);
             }
         }
 
@@ -157,8 +156,6 @@ public class Server {
         SelectionKey ckey = client.register(selector, SelectionKey.OP_READ);
         ckey.attach(ctx);
 
-        // System.out.println("✓ Connection from " + client.getRemoteAddress()
-        //         + " on port " + info.port);
     }
 
     private void onRead(SelectionKey key) {
@@ -173,8 +170,7 @@ public class Server {
             int n = client.read(ctx.readBuf);
 
             if (n == -1) {
-                // client closed connection
-                // System.out.println("Client closed connection");
+
                 cleanup(key, client, ctx);
                 return;
             }
@@ -193,18 +189,46 @@ public class Server {
 
                 ctx.chosenServer = ctx.request.getChosenServer();
 
-                // change interest to write
                 key.interestOps(SelectionKey.OP_WRITE);
             }
 
         } catch (IllegalArgumentException e) {
             //error from request parsing (e.g. headers too large, invalid format, etc)
-            handleHttpError(key, ctx, e.getMessage());
 
-            // http.HttpResponse.ErrorResponse(400, "Bad Request", "", "").toByteBuffer();
+            if (ctx.request.getChosenServer() != null) {
+                ctx.chosenServer = ctx.request.getChosenServer();
+            }
+
+            String errPage = "";
+            if (ctx.chosenServer != null) {
+                if (ctx.chosenServer.errorPages != null && ctx.chosenServer.errorPages.containsKey(400)) {
+                    errPage = ctx.chosenServer.errorPages.get(400);
+                }
+            }
+
+            ctx.writeBuf = http.HttpResponse.ErrorResponse(400, "Bad Request", "", errPage).toByteBuffer();
+            ctx.responseReady = true;
+
+            key.interestOps(SelectionKey.OP_WRITE);
+
         } catch (Exception e) {
-            System.err.println(" Read error: " + e.getMessage());
-            handleHttpError(key, ctx, "500 Internal Server Error");
+
+            if (ctx.request.getChosenServer() != null) {
+                ctx.chosenServer = ctx.request.getChosenServer();
+            }
+
+            String errPage = "";
+            if (ctx.chosenServer != null) {
+                if (ctx.chosenServer.errorPages != null && ctx.chosenServer.errorPages.containsKey(500)) {
+                    errPage = ctx.chosenServer.errorPages.get(500);
+                }
+            }
+
+            ctx.writeBuf = http.HttpResponse.ErrorResponse(500, "Bad Request", "", errPage).toByteBuffer();
+            ctx.responseReady = true;
+
+            key.interestOps(SelectionKey.OP_WRITE);
+
         }
     }
 
@@ -246,22 +270,21 @@ public class Server {
             long elapsed = now - ctx.connectedAt;
             long idle = now - ctx.lastActivityAt;
 
-           
             if (!ctx.request.isRequestCompleted() && elapsed > headerTimeout) {
-                System.out.println("⏱ Header timeout (" + elapsed + "ms)");
+                System.out.println("Header timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
             if (ctx.request.isRequestCompleted() && !ctx.responseReady
                     && elapsed > bodyTimeout) {
-                System.out.println("⏱ Body processing timeout (" + elapsed + "ms)");
+                System.out.println("Body processing timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
             if (idle > idleTimeout) {
-                System.out.println("⏱ Idle timeout (" + idle + "ms)");
+                System.out.println("Idle timeout (" + idle + "ms)");
                 safeCleanup(key);
             }
         }
@@ -322,46 +345,3 @@ public class Server {
         }
     }
 }
-
-// String hostHeader = HttpRequest.getHeaderIgnoreCase(ctx.request.getHeaders(), "Host");
-// ctx.chosenServer =HttpRequest.chooseServerByHost(
-    //         ctx.listenerInfo.serverCfgs, hostHeader
-    // );
-    // set max body size based on chosen server
-    // System.out.println("max body size: "+ctx.chosenServer.clientMaxBodySize);
-    // long maxBodySize = ctx.chosenServer != null ? ctx.chosenServer.clientMaxBodySize : 1_000_000;
-    // ctx.request.setMaxBodyBytes(maxBodySize);
-    
-    
-        // private static AppConfig.ServerConfig chooseServerByHost(
-        //         List<AppConfig.ServerConfig> cfgs, String hostHeader) {
-        //     String host = normalizeHost(hostHeader);
-        //     // search for matching server name in Host header
-        //     if (host != null) {
-        //         for (AppConfig.ServerConfig sc : cfgs) {
-        //             if (sc.name != null && host.equals(sc.name.toLowerCase())) {
-        //                 return sc;
-        //             }
-        //         }
-        //     }
-        //     // serch for default server
-        //     for (AppConfig.ServerConfig sc : cfgs) {
-        //         if (sc.defaultServer) {
-        //             return sc;
-        //         }
-        //     }
-        //     // final fallback to first server
-        //     return cfgs.isEmpty() ? null : cfgs.get(0);
-        // }
-        // private static String normalizeHost(String hostHeader) {
-        //     if (hostHeader == null) {
-        //         return null;
-        //     }
-        //     String h = hostHeader.trim().toLowerCase();
-        //     int idx = h.indexOf(':');
-        //     if (idx != -1) {
-        //         h = h.substring(0, idx);
-        //     }
-        //     // System.err.println("Host header: " + hostHeader + " → normalized: " + h);
-        //     return h;
-        // }

@@ -38,7 +38,7 @@ public class HttpRequest {
     private long bodyWritten = 0;
 
     private Path bodyFile;
-    private FileChannel bodyChannel; // ✅ تغيير من OutputStream إلى FileChannel
+    private FileChannel bodyChannel; //  تغيير من OutputStream إلى FileChannel
 
     private final ByteArray lineBuf = new ByteArray(128);
     private int currentChunkSize = -1;
@@ -138,18 +138,19 @@ public class HttpRequest {
             String v = line.substring(idx + 1).trim();
             headers.put(k, v);
         }
-    }
 
-    private void decideBodyMode() throws IOException {
         String hostHeader = HttpRequest.getHeaderIgnoreCase(this.getHeaders(), "Host");
 
         this.chosenServer = HttpRequest.chooseServerByHost(
                 this.serverCfgs, hostHeader
         );
-
+        System.out.println("server chosen:" + this.chosenServer.name);
         this.maxBodyBytes = (this.chosenServer != null)
                 ? this.chosenServer.clientMaxBodySize
                 : 1048576L; // default 1 MB
+    }
+
+    private void decideBodyMode() throws IOException {
 
         String te = getHeaderIgnoreCase(headers, "Transfer-Encoding");
         if (te != null && te.equalsIgnoreCase("chunked")) {
@@ -347,6 +348,7 @@ public class HttpRequest {
                 bodyChannel.close();
             } catch (Exception ignored) {
             }
+
             bodyChannel = null;
         }
 

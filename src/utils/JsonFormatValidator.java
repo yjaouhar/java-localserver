@@ -43,49 +43,40 @@ public class JsonFormatValidator {
         ARR_COMMA_OR_END
     }
 
-    // ========= PUBLIC ENTRY POINT =========
     public static InnerJsonFormatValidator isValidJsonFormat(String json) {
 
-        // CASE 1: null
         if (json == null) {
             return new InnerJsonFormatValidator(false, "JSON is null", 0);
         }
 
-        // CASE 1b: empty or whitespace only
         int firstNonWhitespace = firstNonWhitespaceIndex(json);
         if (firstNonWhitespace == -1) {
             return new InnerJsonFormatValidator(false, "JSON is empty or contains only whitespace", 0);
         }
 
-        // CASE 2: root must start with '{' (config must be an object)
         if (json.charAt(firstNonWhitespace) != '{') {
             return new InnerJsonFormatValidator(false, "Config JSON must start with '{'", firstNonWhitespace);
         }
 
-        // CASE 3: quotes must be closed
         if (!quotesAreClosed(json)) {
             return new InnerJsonFormatValidator(false, "Quotes are not closed", null);
         }
 
-        // CASE 6: braces/brackets mismatch/unmatched with index (ignoring inside strings)
         Integer braceErr = findBraceBracketErrorIndex(json);
         if (braceErr != null) {
             return new InnerJsonFormatValidator(false, "Braces/brackets mismatch or unmatched", braceErr);
         }
 
-        // CASE 7: trailing comma with index
         Integer trailingIndex = findTrailingCommaIndex(json);
         if (trailingIndex != null) {
             return new InnerJsonFormatValidator(false, "Trailing comma before closing bracket/brace", trailingIndex);
         }
 
-        // CASE 8 + CASE 9: structural rules + strict primitives (non-negative integers only)
         StructuralError se = findStructuralError(json, firstNonWhitespace);
         if (se != null) {
             return new InnerJsonFormatValidator(false, se.message, se.index);
         }
 
-        // CASE 4: invalid characters outside strings (basic filter)
         Integer badChar = findInvalidCharOutsideStrings(json);
         if (badChar != null) {
             return new InnerJsonFormatValidator(
@@ -95,7 +86,6 @@ public class JsonFormatValidator {
             );
         }
 
-        // CASE 5: extra content after root object ends
         Integer extra = findExtraContentAfterRootObject(json, firstNonWhitespace);
         if (extra != null) {
             return new InnerJsonFormatValidator(false, "Extra content after root JSON object", extra);

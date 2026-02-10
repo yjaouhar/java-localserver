@@ -1,1 +1,0 @@
-check extention of cgi script
