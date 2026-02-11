@@ -13,17 +13,6 @@ public class ConfigMapper {
 
     public static AppConfig buildAppConfig(Map<String, Object> obj) {
         AppConfig cfg = new AppConfig();
-
-        // if (obj.containsKey("limits")) {
-        //     Map<String, Object> limits = asObject(obj.get("limits"), "limits");
-        //     if (limits.containsKey("max_header_bytes")) {
-        //         cfg.limits.maxHeaderBytes = asInt(limits.get("max_header_bytes"), "limits.max_header_bytes");
-        //     }
-        //     if (limits.containsKey("max_body_bytes")) {
-        //         cfg.limits.maxBodyBytes = asInt(limits.get("max_body_bytes"), "limits.max_body_bytes");
-        //     }
-        // }
-
         if (obj.containsKey("timeouts")) {
             Map<String, Object> t = asObject(obj.get("timeouts"), "timeouts");
             if (t.containsKey("body_ms")) {
@@ -116,9 +105,6 @@ public class ConfigMapper {
         if (r.containsKey("root")) {
             rc.root = asString(r.get("root"), path + ".root");
         }
-
-        // List<String> allowedMethods = List.of("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS");
-        // List<Object> ms = new ArrayList<>();
         boolean hasMesthodPost = false;
         if (r.containsKey("methods")) {
             List<Object> ms = asArray(r.get("methods"), path + ".methods");

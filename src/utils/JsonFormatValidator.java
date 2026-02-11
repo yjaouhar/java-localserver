@@ -127,18 +127,17 @@ public class JsonFormatValidator {
                 pos.push(i);
             } else if (c == '}' || c == ']') {
                 if (stack.isEmpty()) {
-                    return i; // unmatched closing
+                    return i; 
 
                 }
                 char open = stack.pop();
                 pos.pop();
                 if ((c == '}' && open != '{') || (c == ']' && open != '[')) {
-                    return i; // mismatch
+                    return i; 
                 }
             }
         }
 
-        // unclosed opening
         if (!stack.isEmpty()) {
             return pos.peek();
         }
@@ -186,7 +185,7 @@ public class JsonFormatValidator {
         for (int i = rootStartIndex + 1; i < json.length();) {
             char c = json.charAt(i);
 
-            // strings
+            
             if (c == '"' && (i == 0 || json.charAt(i - 1) != '\\')) {
                 int end = findStringEnd(json, i);
                 if (end < 0) {
@@ -195,16 +194,13 @@ public class JsonFormatValidator {
 
                 if (ctx.peek() == Ctx.OBJECT) {
                     if (expect == Expect.OBJ_KEY_OR_END) {
-                        // key
                         expect = Expect.OBJ_COLON;
                     } else if (expect == Expect.OBJ_VALUE) {
-                        // value
                         expect = Expect.OBJ_COMMA_OR_END;
                     } else {
                         return new StructuralError(i, "Unexpected string in object");
                     }
                 } else {
-                    // array string value
                     if (expect == Expect.ARR_VALUE_OR_END) {
                         expect = Expect.ARR_COMMA_OR_END;
                     } else {
@@ -216,13 +212,11 @@ public class JsonFormatValidator {
                 continue;
             }
 
-            // whitespace
             if (isWhitespace(c)) {
                 i++;
                 continue;
             }
 
-            // open object
             if (c == '{') {
                 if (ctx.peek() == Ctx.OBJECT) {
                     if (expect != Expect.OBJ_VALUE) {
@@ -241,7 +235,6 @@ public class JsonFormatValidator {
                 continue;
             }
 
-            // open array
             if (c == '[') {
                 if (ctx.peek() == Ctx.OBJECT) {
                     if (expect != Expect.OBJ_VALUE) {
@@ -260,7 +253,6 @@ public class JsonFormatValidator {
                 continue;
             }
 
-            // close containers
             if (c == '}' || c == ']') {
                 Ctx top = ctx.peek();
 
@@ -275,12 +267,10 @@ public class JsonFormatValidator {
                     if (expect == Expect.OBJ_COLON || expect == Expect.OBJ_VALUE) {
                         return new StructuralError(i, "Object ended but key/value is incomplete");
                     }
-                    // allow '}' when expecting key_or_end (empty object) or comma_or_end (after value)
                     if (expect != Expect.OBJ_KEY_OR_END && expect != Expect.OBJ_COMMA_OR_END) {
                         return new StructuralError(i, "Unexpected '}'");
                     }
                 } else {
-                    // ARRAY
                     if (expect != Expect.ARR_VALUE_OR_END && expect != Expect.ARR_COMMA_OR_END) {
                         return new StructuralError(i, "Unexpected ']'");
                     }
@@ -289,7 +279,6 @@ public class JsonFormatValidator {
                 ctx.pop();
 
                 if (ctx.isEmpty()) {
-                    // root ended
                     return null;
                 } else {
                     if (ctx.peek() == Ctx.OBJECT) {
@@ -303,7 +292,6 @@ public class JsonFormatValidator {
                 continue;
             }
 
-            // colon
             if (c == ':') {
                 if (ctx.peek() != Ctx.OBJECT) {
                     return new StructuralError(i, "':' is not allowed inside arrays");
@@ -316,7 +304,7 @@ public class JsonFormatValidator {
                 continue;
             }
 
-            // comma
+            
             if (c == ',') {
                 if (ctx.peek() == Ctx.OBJECT) {
                     if (expect != Expect.OBJ_COMMA_OR_END) {
@@ -333,7 +321,6 @@ public class JsonFormatValidator {
                 continue;
             }
 
-            // primitive token: STRICT (non-negative integers only) OR true/false/null
             if (ctx.peek() == Ctx.OBJECT) {
                 if (expect != Expect.OBJ_VALUE) {
                     return new StructuralError(i, "Unexpected token in object (value must come after ':')");
@@ -398,7 +385,6 @@ public class JsonFormatValidator {
     }
 
     // ========= CASE 9: CONFIG PRIMITIVES =========
-    // In this config: numbers must be NON-NEGATIVE INTEGERS ONLY (no '-', no '.', no 'e')
     private static boolean isValidConfigPrimitive(String token) {
         if (token == null || token.isEmpty()) {
             return false;
@@ -416,20 +402,17 @@ public class JsonFormatValidator {
             return false;
         }
 
-        // forbid + or -
         char first = s.charAt(0);
         if (first == '-' || first == '+') {
             return false;
         }
 
-        // digits only
         for (int i = 0; i < n; i++) {
             if (!isDigit(s.charAt(i))) {
                 return false;
             }
         }
 
-        // forbid leading zeros except "0"
         if (n > 1 && s.charAt(0) == '0') {
             return false;
         }
@@ -437,7 +420,6 @@ public class JsonFormatValidator {
         return true;
     }
 
-    // ========= CASE 4: INVALID CHARS OUTSIDE STRINGS (basic filter) =========
     private static Integer findInvalidCharOutsideStrings(String json) {
         boolean inside = false;
 

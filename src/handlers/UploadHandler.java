@@ -11,8 +11,8 @@ import utils.json.AppConfig;
 public class UploadHandler {
 
     public static HttpResponse handleUpload(AppConfig.RouteConfig route,
-            HttpRequest request,
-            Map<Integer, String> errorPages) {
+                                           HttpRequest request,
+                                           Map<Integer, String> errorPages) {
 
         if (request == null || !"POST".equals(request.getMethod())) {
             return HttpResponse.ErrorResponse(405, "Method Not Allowed",
@@ -26,7 +26,7 @@ public class UploadHandler {
         }
 
         String boundary = extractBoundary(contentType);
-        if (boundary == null) {
+        if (boundary == null || boundary.isEmpty()) {
             return HttpResponse.ErrorResponse(400, "Bad Request",
                     "Missing boundary", errorPages.get(400));
         }
@@ -36,48 +36,64 @@ public class UploadHandler {
 
         Path bodyFile = request.getBodyFile();
 
-        try (InputStream in
-                = new BufferedInputStream(Files.newInputStream(bodyFile))) {
+        try (InputStream fin = new BufferedInputStream(Files.newInputStream(bodyFile));
+             PushbackInputStream in = new PushbackInputStream(fin, 1024 * 128)) { // 128KB pushback
 
-            // 1️⃣ دور على أول boundary
             String line;
             while ((line = readLine(in)) != null) {
-                if (line.equals(startBoundary)) {
-                    break;
-                }
+                if (line.equals(startBoundary)) break;
+            }
+            if (line == null) {
+                return HttpResponse.ErrorResponse(400, "Bad Request",
+                        "No multipart boundary found in body", errorPages.get(400));
             }
 
-            // 2️⃣ loop على parts
+            Path uploadDir = Paths.get(route.uploadDir);
+            Files.createDirectories(uploadDir);
+
             while (true) {
                 Map<String, String> headers = new HashMap<>();
 
-                // 3️⃣ قرا headers
                 while ((line = readLine(in)) != null && !line.isEmpty()) {
                     int idx = line.indexOf(":");
                     if (idx != -1) {
-                        headers.put(
-                                line.substring(0, idx).trim(),
-                                line.substring(idx + 1).trim()
-                        );
+                        headers.put(line.substring(0, idx).trim(),
+                                    line.substring(idx + 1).trim());
                     }
                 }
 
-                if (headers.isEmpty()) {
-                    break;
-                }
+                if (headers.isEmpty()) break;
 
                 String cd = headers.get("Content-Disposition");
                 boolean isFile = cd != null && cd.contains("filename=");
 
                 if (isFile) {
                     String filename = extractFilename(cd);
-                    Path outFile = Paths.get(route.uploadDir, filename).normalize();
-                    writeFileData(in, outFile, startBoundary);
+                    Path outFile = uploadDir.resolve(filename).normalize();
+
+                    if (!outFile.startsWith(uploadDir)) {
+                        return HttpResponse.ErrorResponse(400, "Bad Request",
+                                "Invalid filename", errorPages.get(400));
+                    }
+
+                    try (OutputStream out = new BufferedOutputStream(
+                            Files.newOutputStream(outFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING))) {
+
+                        copyPartBodyUntilBoundary(in, out, startBoundary);
+                    }
+
                 } else {
-                    skipPartData(in, startBoundary, endBoundary);
+                    discardPartBodyUntilBoundary(in, startBoundary);
                 }
 
-                if (line == null || line.equals(endBoundary)) {
+                line = readLine(in);
+                if (line == null) break;
+
+                if (line.equals(endBoundary)) {
+                    break; 
+                } else if (line.equals(startBoundary)) {
+                    continue; 
+                } else {
                     break;
                 }
             }
@@ -87,8 +103,7 @@ public class UploadHandler {
                     e.getMessage(), errorPages.get(500));
         }
 
-        return HttpResponse.successResponse(201, "Created",
-                "Upload OK");
+        return HttpResponse.successResponse(201, "Created", "Upload OK");
     }
 
     // ================= helpers =================
@@ -96,7 +111,11 @@ public class UploadHandler {
         for (String part : ct.split(";")) {
             part = part.trim();
             if (part.startsWith("boundary=")) {
-                return part.substring(9);
+                String b = part.substring("boundary=".length()).trim();
+                if (b.startsWith("\"") && b.endsWith("\"") && b.length() >= 2) {
+                    b = b.substring(1, b.length() - 1);
+                }
+                return b;
             }
         }
         return null;
@@ -104,77 +123,108 @@ public class UploadHandler {
 
     private static String extractFilename(String cd) {
         int s = cd.indexOf("filename=\"");
-        if (s == -1) {
-            return "upload.bin";
-        }
-        s += 10;
+        if (s == -1) return "upload.bin";
+        s += "filename=\"".length();
         int e = cd.indexOf("\"", s);
+        if (e == -1) return "upload.bin";
         return Paths.get(cd.substring(s, e)).getFileName().toString();
     }
 
-    // ================= CORE =================
-    // read line safely from InputStream
     private static String readLine(InputStream in) throws IOException {
         ByteArrayOutputStream line = new ByteArrayOutputStream();
         int b;
         while ((b = in.read()) != -1) {
-            if (b == '\n') {
-                break;
-            }
-            if (b != '\r') {
-                line.write(b);
-            }
+            if (b == '\n') break;
+            if (b != '\r') line.write(b);
         }
-        if (line.size() == 0 && b == -1) {
-            return null;
-        }
+        if (line.size() == 0 && b == -1) return null;
         return line.toString(StandardCharsets.ISO_8859_1);
     }
 
-    private static void writeFileData(InputStream in,
-            Path file,
-            String boundary) throws IOException {
+    // ================= CORE (FIXED) =================
 
-        try (OutputStream out
-                = new BufferedOutputStream(Files.newOutputStream(file))) {
 
-            byte[] buf = new byte[4096];
-            ByteArrayOutputStream temp = new ByteArrayOutputStream();
-            int n;
+    private static void copyPartBodyUntilBoundary(PushbackInputStream in,
+                                                 OutputStream out,
+                                                 String startBoundary) throws IOException {
 
-            while ((n = in.read(buf)) != -1) {
-                temp.write(buf, 0, n);
-                byte[] data = temp.toByteArray();
-                String s = new String(data, StandardCharsets.ISO_8859_1);
+        byte[] delim = ("\r\n" + startBoundary).getBytes(StandardCharsets.ISO_8859_1);
+        int keep = delim.length - 1;
 
-                int idx = s.indexOf("\r\n" + boundary);
-                if (idx != -1) {
-                    out.write(data, 0, idx);
-                    break;
-                } else {
-                    out.write(data);
-                    temp.reset();
+        byte[] buf = new byte[8192];
+        byte[] tail = new byte[0];
+
+        int n;
+        while ((n = in.read(buf)) != -1) {
+
+            byte[] chunk = combine(tail, buf, n);
+
+            int pos = indexOf(chunk, delim);
+            if (pos >= 0) {
+                out.write(chunk, 0, pos);
+
+                int unreadFrom = pos + 2; // skip \r\n
+                if (unreadFrom < chunk.length) {
+                    in.unread(chunk, unreadFrom, chunk.length - unreadFrom);
                 }
+                return;
+            }
+
+            if (chunk.length > keep) {
+                int writeLen = chunk.length - keep;
+                out.write(chunk, 0, writeLen);
+                tail = Arrays.copyOfRange(chunk, writeLen, chunk.length);
+            } else {
+                tail = chunk; 
+            }
+        }
+    }
+    private static void discardPartBodyUntilBoundary(PushbackInputStream in,
+                                                    String startBoundary) throws IOException {
+        byte[] delim = ("\r\n" + startBoundary).getBytes(StandardCharsets.ISO_8859_1);
+        int keep = delim.length - 1;
+
+        byte[] buf = new byte[8192];
+        byte[] tail = new byte[0];
+
+        int n;
+        while ((n = in.read(buf)) != -1) {
+            byte[] chunk = combine(tail, buf, n);
+
+            int pos = indexOf(chunk, delim);
+            if (pos >= 0) {
+                int unreadFrom = pos + 2; 
+                if (unreadFrom < chunk.length) {
+                    in.unread(chunk, unreadFrom, chunk.length - unreadFrom);
+                }
+                return;
+            }
+
+            if (chunk.length > keep) {
+                int keepStart = chunk.length - keep;
+                tail = Arrays.copyOfRange(chunk, keepStart, chunk.length);
+            } else {
+                tail = chunk;
             }
         }
     }
 
-    private static void skipPartData(InputStream in,
-            String boundary,
-            String endBoundary) throws IOException {
+    private static byte[] combine(byte[] a, byte[] b, int bLen) {
+        byte[] r = new byte[a.length + bLen];
+        System.arraycopy(a, 0, r, 0, a.length);
+        System.arraycopy(b, 0, r, a.length, bLen);
+        return r;
+    }
 
-        ByteArrayOutputStream temp = new ByteArrayOutputStream();
-        byte[] buf = new byte[1024];
-        int n;
-
-        while ((n = in.read(buf)) != -1) {
-            temp.write(buf, 0, n);
-            String s = temp.toString(StandardCharsets.ISO_8859_1);
-
-            if (s.contains("\r\n" + boundary) || s.contains("\r\n" + endBoundary)) {
-                break;
+    private static int indexOf(byte[] data, byte[] pattern) {
+        if (pattern.length == 0) return 0;
+        outer:
+        for (int i = 0; i <= data.length - pattern.length; i++) {
+            for (int j = 0; j < pattern.length; j++) {
+                if (data[i + j] != pattern[j]) continue outer;
             }
-            temp.reset();
+            return i;
         }
+        return -1;
     }
 }

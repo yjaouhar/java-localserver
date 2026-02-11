@@ -19,6 +19,9 @@ public class CGIHandler {
         this.cgiTimeout = timeoutSeconds;
     }
     
+    /**
+     * بدء CGI (non-blocking)
+     */
     public void executeCGI(SelectionKey clientKey, RouteConfig route, 
                           HttpRequest request, Map<Integer, String> errorPages) throws IOException {
         
@@ -36,14 +39,13 @@ public class CGIHandler {
                 ? route.cgi.interpreter
                 : "python3";
         
-        ProcessBuilder pb = new ProcessBuilder(interpreter, scriptPath.toString());
+        ProcessBuilder pb = new ProcessBuilder(interpreter, "-u", scriptPath.toString());
         
-        // Setup environment
         Map<String, String> env = pb.environment();
         env.put("REQUEST_METHOD", request.getMethod());
         env.put("SCRIPT_NAME", reqPath);
-        String pathInfo = extractPathInfo(request.getPath(), reqPath);
-        env.put("PATH_INFO", pathInfo == null ? "" : pathInfo);
+        env.put("PATH_INFO", extractPathInfo(request.getPath(), reqPath));
+        
         String qs = extractQueryString(request.getPath());
         if (qs != null) {
             env.put("QUERY_STRING", qs);
@@ -55,117 +57,91 @@ public class CGIHandler {
                 : 0;
         env.put("CONTENT_LENGTH", String.valueOf(contentLen));
         
-        String ct = HttpRequest.getHeaderIgnoreCase(
-                request.getHeaders(), "Content-Type"
-        );
+        String ct = request.getHeader("Content-Type");
         if (ct != null) {
             env.put("CONTENT_TYPE", ct);
         }
         
-        // Start process
+        env.put("PYTHONUNBUFFERED", "1");
+        
         Process process = pb.start();
         
-        // ✅ اكتب الـ input
-        try (OutputStream stdin = process.getOutputStream()) {
+
+        try {
+            OutputStream stdin = process.getOutputStream();
             if (bodyFile != null && contentLen > 0) {
-                try (InputStream in = Files.newInputStream(bodyFile)) {
-                    pipe(in, stdin);
-                }
+                byte[] bodyBytes = Files.readAllBytes(bodyFile);
+                stdin.write(bodyBytes);
             }
+            stdin.close();
+        } catch (IOException e) {
+            System.err.println("[CGI] Error writing stdin: " + e.getMessage());
         }
         
-        // ✅ إنشاء CGI context مع streaming
-        CGIStreamingContext ctx = new CGIStreamingContext(process, request, System.currentTimeMillis());
+        CGIStreamingContext ctx = new CGIStreamingContext(
+            process, request, System.currentTimeMillis()
+        );
         pendingCGI.put(clientKey, ctx);
         
         clientKey.interestOps(0);
         
-        System.out.println("[CGI] Started streaming CGI process");
+        System.out.println("[CGI] Started: " + scriptPath);
     }
     
+   
     public void checkPendingCGI(SelectionKey clientKey, Map<Integer, String> errorPages) {
-        Object rawCtx = pendingCGI.get(clientKey);
+        CGIContext rawCtx = pendingCGI.get(clientKey);
         
-        if (rawCtx == null) {
+        if (rawCtx == null || !(rawCtx instanceof CGIStreamingContext)) {
             return;
         }
         
-        // ✅ استخدام الـ streaming context
-        if (rawCtx instanceof CGIStreamingContext) {
-            CGIStreamingContext ctx = (CGIStreamingContext) rawCtx;
-            Process process = ctx.getProcess();
+        CGIStreamingContext ctx = (CGIStreamingContext) rawCtx;
+        Process process = ctx.getProcess();
+        long elapsed = System.currentTimeMillis() - ctx.getStartTime();
+        
+        if (elapsed > cgiTimeout * 1000) {
+            System.err.println("[CGI] Timeout");
+            process.destroyForcibly();
             
-            long elapsed = System.currentTimeMillis() - ctx.getStartTime();
+            String output = ctx.getCollectedOutput();
+            if (!output.isEmpty()) {
+                sendSimpleResponse(clientKey, output);
+            } else {
+                sendErrorResponse(clientKey, 504, "Gateway Timeout", "CGI timeout", errorPages.get(504));
+            }
             
-            // ✅ فحص timeout
-            if (elapsed > cgiTimeout * 10000) {
-                System.err.println("[CGI] Timeout - destroying process");
-                process.destroyForcibly();
+            pendingCGI.remove(clientKey);
+            return;
+        }
+        
+        try {
+            ctx.readAvailableOutput();
+            if (!process.isAlive()) {
+                System.out.println("[CGI] Process finished");
+                ctx.readRemainingOutput();
                 
-                // إرسال ما تم جمعه حتى الآن
                 String output = ctx.getCollectedOutput();
-                if (!output.isEmpty()) {
-                    HttpResponse response = createStreamedResponse(output);
-                    sendResponse(clientKey, response);
-                } else {
-                    sendErrorResponse(clientKey, 504, "Gateway Timeout", "CGI timeout", errorPages.get(504));
-                }
+                HttpResponse response = parseCGIResponse(output);
+                sendResponse(clientKey, response);
                 
                 pendingCGI.remove(clientKey);
-                return;
+                System.out.println("[CGI] Sent " + output.length() + " bytes");
             }
             
-            try {
-                // ✅ قراءة الـ output المتاح
-                boolean hasNewData = ctx.readAvailableOutput();
-                
-                // ✅ فحص إذا كان الـ process انتهى
-                if (!process.isAlive()) {
-                    System.out.println("[CGI] Process finished");
-                    
-                    // قراءة نهائية
-                    ctx.readRemainingOutput();
-                    
-                    // إرسال الـ response
-                    String output = ctx.getCollectedOutput();
-                    HttpResponse response = parseCGIResponse(output);
-                    sendResponse(clientKey, response);
-                    
-                    pendingCGI.remove(clientKey);
-                    System.out.println("[CGI] Completed - sent " + output.length() + " bytes");
-                    
-                } else if (hasNewData) {
-                    // ✅ لو عندنا output جديد، نتحقق إذا كان كافي لإرسال
-                    String output = ctx.getCollectedOutput();
-                    
-                    // إذا عندنا headers كاملة + شوية data، نبدأ نرسلو
-                    if (!ctx.isHeadersSent() && output.contains("\n\n")) {
-                        System.out.println("[CGI] Starting to stream response...");
-                        
-                        HttpResponse response = parseCGIResponse(output);
-                        sendResponse(clientKey, response);
-                        ctx.markHeadersSent();
-                        
-                        // ملاحظة: هنا في implementation أبسط نرسلو كامل
-                        // للـ true streaming، نحتاج chunked transfer encoding
-                        pendingCGI.remove(clientKey);
-                    }
-                }
-                
-            } catch (IOException e) {
-                System.err.println("[CGI] Error: " + e.getMessage());
-                sendErrorResponse(clientKey, 500, "Internal Server Error", "CGI Error", errorPages.get(500));
-                pendingCGI.remove(clientKey);
-            }
+        } catch (IOException e) {
+            System.err.println("[CGI] Error: " + e.getMessage());
+            sendErrorResponse(clientKey, 500, "Internal Server Error", "CGI Error", errorPages.get(500));
+            pendingCGI.remove(clientKey);
         }
     }
     
-    // ✅ Streaming context جديد
+    // ================= CGI Context =================
+    
     static class CGIStreamingContext extends CGIContext {
         private final StringBuilder outputBuffer = new StringBuilder();
         private final InputStream stdout;
         private final InputStream stderr;
-        private boolean headersSent = false;
         
         public CGIStreamingContext(Process process, HttpRequest request, long startTime) {
             super(process, request, startTime);
@@ -173,21 +149,16 @@ public class CGIHandler {
             this.stderr = process.getErrorStream();
         }
         
-        public boolean readAvailableOutput() throws IOException {
-            boolean hadData = false;
-            
-            // قراءة stdout
+        public void readAvailableOutput() throws IOException {
             if (stdout.available() > 0) {
                 byte[] buffer = new byte[stdout.available()];
                 int read = stdout.read(buffer);
                 if (read > 0) {
                     outputBuffer.append(new String(buffer, 0, read, StandardCharsets.UTF_8));
-                    hadData = true;
-                    System.out.print(new String(buffer, 0, read, StandardCharsets.UTF_8)); // ✅ طباعة للـ console
+                    System.out.print(new String(buffer, 0, read, StandardCharsets.UTF_8));
                 }
             }
             
-            // قراءة stderr (للـ debugging)
             if (stderr.available() > 0) {
                 byte[] buffer = new byte[stderr.available()];
                 int read = stderr.read(buffer);
@@ -195,8 +166,6 @@ public class CGIHandler {
                     System.err.print("[CGI stderr] " + new String(buffer, 0, read, StandardCharsets.UTF_8));
                 }
             }
-            
-            return hadData;
         }
         
         public void readRemainingOutput() throws IOException {
@@ -211,37 +180,19 @@ public class CGIHandler {
         public String getCollectedOutput() {
             return outputBuffer.toString();
         }
-        
-        public boolean isHeadersSent() {
-            return headersSent;
-        }
-        
-        public void markHeadersSent() {
-            headersSent = true;
-        }
     }
     
-    // ✅ إنشاء response من streaming
-    private HttpResponse createStreamedResponse(String output) {
-        if (output.contains("\n\n")) {
-            return parseCGIResponse(output);
-        } else {
-            // لو ما فيهش headers، نرسلو كـ plain text
-            HttpResponse res = new HttpResponse(200, "OK");
-            res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
-            res.setBody(output);
-            return res;
-        }
-    }
+    // ================= Helper Methods =================
     
     private HttpResponse parseCGIResponse(String out) {
         int sep = out.indexOf("\n\n");
-        if (sep == -1) {
-            sep = out.indexOf("\r\n\r\n");
-        }
+        if (sep == -1) sep = out.indexOf("\r\n\r\n");
         
         if (sep == -1) {
-            return HttpResponse.successResponse(200, "OK", out);
+            HttpResponse res = new HttpResponse(200, "OK");
+            res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
+            res.setBody(out);
+            return res;
         }
 
         String headerPart = out.substring(0, sep);
@@ -250,11 +201,12 @@ public class CGIHandler {
         HttpResponse res = new HttpResponse(200, "OK");
 
         for (String line : headerPart.split("[\r\n]+")) {
+            if (line.isEmpty()) continue;
             int idx = line.indexOf(':');
             if (idx != -1) {
                 res.setHeaders(
-                        line.substring(0, idx).trim(),
-                        line.substring(idx + 1).trim()
+                    line.substring(0, idx).trim(),
+                    line.substring(idx + 1).trim()
                 );
             }
         }
@@ -264,6 +216,7 @@ public class CGIHandler {
     }
     
     private void sendResponse(SelectionKey key, HttpResponse response) {
+        System.out.println("((((((((((((((((((( " + response.getBody()+ "  ))))))))))))))))");
         Object attachment = key.attachment();
         if (attachment != null) {
             try {
@@ -278,6 +231,13 @@ public class CGIHandler {
         }
     }
     
+    private void sendSimpleResponse(SelectionKey key, String output) {
+        HttpResponse res = new HttpResponse(200, "OK");
+        res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
+        res.setBody(output);
+        sendResponse(key, res);
+    }
+    
     private void sendErrorResponse(SelectionKey key, int code, String message, String detail, String errorPage) {
         HttpResponse response = HttpResponse.ErrorResponse(code, message, detail, errorPage);
         sendResponse(key, response);
@@ -288,25 +248,15 @@ public class CGIHandler {
     }
     
     public void cleanup(SelectionKey key) {
-        Object ctx = pendingCGI.remove(key);
-        if (ctx instanceof CGIContext) {
-            Process p = ((CGIContext) ctx).getProcess();
+        CGIContext ctx = pendingCGI.remove(key);
+        if (ctx != null) {
+            Process p = ctx.getProcess();
             if (p.isAlive()) {
                 p.destroyForcibly();
             }
         }
     }
     
-    // ================= helpers =================
-    private static void pipe(InputStream in, OutputStream out) throws IOException {
-        byte[] buf = new byte[8192];
-        int n;
-        while ((n = in.read(buf)) != -1) {
-            out.write(buf, 0, n);
-        }
-        out.flush();
-    }
-
     private static String stripQuery(String path) {
         int q = path.indexOf('?');
         return q == -1 ? path : path.substring(0, q);

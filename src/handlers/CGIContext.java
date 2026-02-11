@@ -6,7 +6,6 @@ public class CGIContext {
     private final Process process;
     private final HttpRequest request;
     private final long startTime;
-    // thread reading process output
     private Thread readerThread;
     
     public CGIContext(Process process, HttpRequest request, long startTime) {

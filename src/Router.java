@@ -67,11 +67,9 @@ public class Router {
             return redirectResponse;
         }
 
-        // CGI handling - non-blocking
         if (matchedRoute.cgi != null) {
             try {
                 cgiHandler.executeCGI(clientKey, matchedRoute, request, config.errorPages);
-                // Return null - response ghadi yji later mn checkPendingCGI
                 return null;
             } catch (Exception e) {
                 return HttpResponse.ErrorResponse(500, "Internal Server Error",

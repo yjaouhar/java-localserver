@@ -38,14 +38,13 @@ public class HttpRequest {
     private long bodyWritten = 0;
 
     private Path bodyFile;
-    private FileChannel bodyChannel; //  تغيير من OutputStream إلى FileChannel
+    private FileChannel bodyChannel; 
 
     private final ByteArray lineBuf = new ByteArray(128);
     private int currentChunkSize = -1;
     private int remainingChunkBytes = 0;
 
-    // ✅ للتحكم في معدل الكتابة
-    private static final int MAX_WRITE_PER_CALL = 8192; // 8KB max per call
+    private static final int MAX_WRITE_PER_CALL = 8192; 
 
     public HttpRequest(List<AppConfig.ServerConfig> serverCfgs) {
         this.serverCfgs.addAll(serverCfgs);
@@ -151,8 +150,31 @@ public class HttpRequest {
     }
 
     private void decideBodyMode() throws IOException {
+        String host = getHeaderIgnoreCase(headers, "Host");
+        String cl   = getHeaderIgnoreCase(headers, "Content-Length");
+        String ct = getHeaderIgnoreCase(headers, "Content-Type");
+        String te   = getHeaderIgnoreCase(headers, "Transfer-Encoding");
 
-        String te = getHeaderIgnoreCase(headers, "Transfer-Encoding");
+        if ("HTTP/1.1".equals(version) && host == null) {
+            state = State.DONE;
+            throw new IllegalArgumentException("400 Bad Request: Missing Host header");
+        }
+
+        boolean methodMayHaveBody = method.equals("POST") || method.equals("PUT") || method.equals("PATCH");
+
+        if (methodMayHaveBody) {
+            boolean hasCL = (cl != null && ct != null);
+            boolean hasChunked = (te != null && te.toLowerCase().contains("chunked"));
+
+            if (!hasCL && !hasChunked) {
+                state = State.DONE;
+                throw new IllegalArgumentException("411 Length Required");
+            }
+            if (hasCL && hasChunked) {
+                state = State.DONE;
+                throw new IllegalArgumentException("400 Bad Request: Both Content-Length and chunked");
+            }
+        }   
         if (te != null && te.equalsIgnoreCase("chunked")) {
             isChunked = true;
             openBodyFile();
@@ -160,7 +182,6 @@ public class HttpRequest {
             return;
         }
 
-        String cl = getHeaderIgnoreCase(headers, "Content-Length");
         if (cl != null) {
             try {
                 contentLength = Long.parseLong(cl.trim());
@@ -198,7 +219,6 @@ public class HttpRequest {
 
         bodyFile = Files.createTempFile(tempDir, "reqbody_", ".txt");
 
-        // ✅ استخدام FileChannel مباشرة (non-blocking)
         bodyChannel = FileChannel.open(
                 bodyFile,
                 StandardOpenOption.WRITE,
@@ -214,7 +234,6 @@ public class HttpRequest {
             return;
         }
 
-        // ✅ نكتب فقط كمية محدودة في كل مرة
         int toWrite = (int) Math.min(remaining, buf.remaining());
         toWrite = Math.min(toWrite, MAX_WRITE_PER_CALL);
 
@@ -271,7 +290,7 @@ public class HttpRequest {
 
     private void readChunkData(ByteBuffer buf) throws IOException {
         int toWrite = Math.min(remainingChunkBytes, buf.remaining());
-        toWrite = Math.min(toWrite, MAX_WRITE_PER_CALL); // ✅ حد الكتابة
+        toWrite = Math.min(toWrite, MAX_WRITE_PER_CALL); 
 
         if (toWrite > 0) {
             byte[] chunk = new byte[toWrite];
@@ -326,7 +345,6 @@ public class HttpRequest {
             throw new IllegalArgumentException("413 Payload Too Large");
         }
 
-        // ✅ كتابة مباشرة باستخدام FileChannel
         ByteBuffer buffer = ByteBuffer.wrap(b, off, len);
         while (buffer.hasRemaining()) {
             bodyChannel.write(buffer);
@@ -335,7 +353,7 @@ public class HttpRequest {
 
     private void finishBody() throws IOException {
         if (bodyChannel != null) {
-            bodyChannel.force(false); // sync to disk
+            bodyChannel.force(false); 
             bodyChannel.close();
             bodyChannel = null;
         }

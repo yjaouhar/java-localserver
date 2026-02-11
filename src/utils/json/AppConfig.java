@@ -5,7 +5,6 @@ import java.util.*;
 public class AppConfig {
 
     public Timeouts timeouts = new Timeouts();
-    // public Limits limits = new Limits();
     public List<ServerConfig> servers = new ArrayList<>();
 
     public static class Timeouts {

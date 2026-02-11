@@ -1,6 +1,4 @@
-
 import http.HttpRequest;
-import http.HttpResponse;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
@@ -13,7 +11,6 @@ public class Server {
     private final handlers.CGIHandler cgiHandler;
 
     static class ListenerInfo {
-
         final int port;
         final List<String> serverNames = new ArrayList<>();
         final List<AppConfig.ServerConfig> serverCfgs = new ArrayList<>();
@@ -21,7 +18,7 @@ public class Server {
         ListenerInfo(int port) {
             this.port = port;
         }
-
+        
         void addServer(AppConfig.ServerConfig sc) {
             serverNames.add(sc.name);
             serverCfgs.add(sc);
@@ -29,12 +26,10 @@ public class Server {
     }
 
     static class ConnCtx {
-
         final ListenerInfo listenerInfo;
         final SocketChannel client;
         final ByteBuffer readBuf;
         final HttpRequest request;
-        HttpResponse responseObj;
 
         ByteBuffer writeBuf;
         long connectedAt;
@@ -42,21 +37,20 @@ public class Server {
         boolean responseReady;
         AppConfig.ServerConfig chosenServer;
 
+        boolean isStreaming = false;
+        boolean streamingHeadersSent = false;
+
         long uploadBytesThisSecond = 0;
         long lastSecondTimestamp = 0;
-        static final long MAX_UPLOAD_PER_SECOND = 5 * 1024 * 1024; // 5 MB/s
+        static final long MAX_UPLOAD_PER_SECOND = 5 * 1024 * 1024;
 
         boolean shouldLimitUpload(int bytesAboutToRead) {
-
             long now = System.currentTimeMillis() / 1000;
-
             if (now != lastSecondTimestamp) {
                 uploadBytesThisSecond = 0;
                 lastSecondTimestamp = now;
             }
-
             uploadBytesThisSecond += bytesAboutToRead;
-
             return uploadBytesThisSecond > MAX_UPLOAD_PER_SECOND;
         }
 
@@ -68,7 +62,6 @@ public class Server {
             this.connectedAt = System.currentTimeMillis();
             this.lastActivityAt = this.connectedAt;
             this.responseReady = false;
-            this.responseObj = null;
         }
 
         void updateActivity() {
@@ -78,7 +71,7 @@ public class Server {
 
     public Server(AppConfig appConfig) throws Exception {
         this.appConfig = appConfig;
-        this.cgiHandler = new handlers.CGIHandler(30); // 30 seconds timeout
+        this.cgiHandler = new handlers.CGIHandler(30);
 
         Selector selector = Selector.open();
         Map<Integer, SelectionKey> openedPorts = new HashMap<>();
@@ -104,19 +97,17 @@ public class Server {
                 key.attach(info);
                 openedPorts.put(port, key);
 
-                System.out.println(" Listening on " + sc.host + ":" + port);
+                System.out.println("✓ Listening on " + sc.host + ":" + port);
             }
         }
 
-        System.out.println("\n Server started successfully!\n");
+        System.out.println("\n✓ Server started successfully!\n");
 
         while (true) {
-            // MOHIM: Check pending CGI 9BEL select
             checkAllPendingCGI(selector);
-
+            
             int ready = selector.select(200);
 
-            // check timeouts
             checkTimeouts(selector);
 
             if (ready == 0) {
@@ -141,7 +132,8 @@ public class Server {
                         onWrite(key);
                     }
                 } catch (Exception e) {
-                    System.err.println("Event error: " + e.getMessage());
+                    System.err.println("✗ Event error: " + e.getMessage());
+                    e.printStackTrace();
                     safeCleanup(key);
                 }
             }
@@ -153,9 +145,9 @@ public class Server {
             if (key.isValid() && key.attachment() instanceof ConnCtx) {
                 ConnCtx ctx = (ConnCtx) key.attachment();
                 if (cgiHandler.hasPending(key)) {
-                    Map<Integer, String> errorPages = ctx.chosenServer != null && ctx.chosenServer.errorPages != null
-                            ? ctx.chosenServer.errorPages
-                            : new HashMap<>();
+                    Map<Integer, String> errorPages = ctx.chosenServer != null && ctx.chosenServer.errorPages != null 
+                        ? ctx.chosenServer.errorPages 
+                        : new HashMap<>();
                     cgiHandler.checkPendingCGI(key, errorPages);
                 }
             }
@@ -177,7 +169,6 @@ public class Server {
 
         SelectionKey ckey = client.register(selector, SelectionKey.OP_READ);
         ckey.attach(ctx);
-
     }
 
     private void onRead(SelectionKey key) {
@@ -186,9 +177,11 @@ public class Server {
 
         try {
             ctx.readBuf.clear();
+            
             if (ctx.shouldLimitUpload(ctx.readBuf.capacity())) {
                 return;
             }
+            
             int n = client.read(ctx.readBuf);
 
             if (n == -1) {
@@ -196,7 +189,6 @@ public class Server {
                 return;
             }
 
-            // no data read, just return and wait for next event
             if (n == 0) {
                 return;
             }
@@ -207,120 +199,92 @@ public class Server {
             ctx.request.consume(ctx.readBuf);
 
             if (ctx.request.isRequestCompleted()) {
-
                 ctx.chosenServer = ctx.request.getChosenServer();
-
                 key.interestOps(SelectionKey.OP_WRITE);
             }
 
         } catch (IllegalArgumentException e) {
-            //error from request parsing (e.g. headers too large, invalid format, etc)
-
             if (ctx.request.getChosenServer() != null) {
                 ctx.chosenServer = ctx.request.getChosenServer();
             }
 
             String errPage = "";
-            if (ctx.chosenServer != null) {
-                if (ctx.chosenServer.errorPages != null && ctx.chosenServer.errorPages.containsKey(400)) {
-                    errPage = ctx.chosenServer.errorPages.get(400);
-                }
+            if (ctx.chosenServer != null && ctx.chosenServer.errorPages != null 
+                    && ctx.chosenServer.errorPages.containsKey(400)) {
+                errPage = ctx.chosenServer.errorPages.get(400);
             }
 
             ctx.writeBuf = http.HttpResponse.ErrorResponse(400, "Bad Request", "", errPage).toByteBuffer();
             ctx.responseReady = true;
-
             key.interestOps(SelectionKey.OP_WRITE);
 
         } catch (Exception e) {
-
             if (ctx.request.getChosenServer() != null) {
                 ctx.chosenServer = ctx.request.getChosenServer();
             }
 
             String errPage = "";
-            if (ctx.chosenServer != null) {
-                if (ctx.chosenServer.errorPages != null && ctx.chosenServer.errorPages.containsKey(500)) {
-                    errPage = ctx.chosenServer.errorPages.get(500);
-                }
+            if (ctx.chosenServer != null && ctx.chosenServer.errorPages != null 
+                    && ctx.chosenServer.errorPages.containsKey(500)) {
+                errPage = ctx.chosenServer.errorPages.get(500);
             }
 
-            ctx.writeBuf = http.HttpResponse.ErrorResponse(500, "Bad Request", "", errPage).toByteBuffer();
+            ctx.writeBuf = http.HttpResponse.ErrorResponse(500, "Internal Server Error", "", errPage).toByteBuffer();
             ctx.responseReady = true;
-
             key.interestOps(SelectionKey.OP_WRITE);
-
         }
     }
 
-  private void onWrite(SelectionKey key) {
-    ConnCtx ctx = (ConnCtx) key.attachment();
-    SocketChannel client = ctx.client;
+    private void onWrite(SelectionKey key) {
+        ConnCtx ctx = (ConnCtx) key.attachment();
+        SocketChannel client = ctx.client;
 
-    try {
-        // ✅ إنشاء الـ response أول مرة
-        if (ctx.responseObj == null && ctx.writeBuf == null) {
-            Router router = new Router(ctx.chosenServer, ctx.request, cgiHandler, key);
-            HttpResponse resp = router.route();
-            System.out.println("///////////// Generated response for " + resp);
-            
-            // إذا كان CGI pending
-            if (resp == null) {
-                return;
-            }
-            
-            ctx.responseObj = resp;
-        }
-
-        // ✅ إرسال تدريجي
-        if (ctx.responseObj != null) {
-            // فحص إذا انتهى
-            if (ctx.responseObj.isComplete()) {
-                ctx.responseObj.close();
-                cleanup(key, client, ctx);
-                return;
-            }
-            
-            // إذا لا يوجد buffer، احصل على chunk جديد
+        try {
+            if (ctx.isStreaming) {
+                if (ctx.writeBuf != null && ctx.writeBuf.hasRemaining()) {
+                    int written = client.write(ctx.writeBuf);
+                    if (written > 0) {
+                        ctx.updateActivity();
+                    }
+                }
+                
                 if (ctx.writeBuf == null || !ctx.writeBuf.hasRemaining()) {
-                ByteBuffer next = ctx.responseObj.getNextChunk(8192); // 8KB per chunk
-
-                if (next == null) {
-                    // لا توجد بيانات حاليا، نوقف الكتابة وننتظر وصول بيانات من الـ CGI reader
-                    key.interestOps(0);
+                    ctx.writeBuf = null;
+                }
+                
+                return;
+            }
+            
+            if (ctx.writeBuf == null) {
+                Router router = new Router(ctx.chosenServer, ctx.request, cgiHandler, key);
+                http.HttpResponse resp = router.route();
+                
+                if (resp == null) {
+                    if (cgiHandler.hasPending(key)) {
+                        ctx.isStreaming = true;
+                    }
                     return;
                 }
-
-                ctx.writeBuf = next;
+                
+                ctx.writeBuf = resp.toByteBuffer();
             }
-            
-            // اكتب
 
             int written = client.write(ctx.writeBuf);
             
             if (written > 0) {
                 ctx.updateActivity();
             }
-            
-            // إذا انتهى الـ buffer الحالي، سنحصل على واحد جديد في المرة القادمة
-            return;
-        }
-        
-        // ✅ الطريقة القديمة (للتوافق)
-        if (ctx.writeBuf != null) {
-            client.write(ctx.writeBuf);
-            
+
             if (!ctx.writeBuf.hasRemaining()) {
                 cleanup(key, client, ctx);
             }
-        }
 
-    } catch (Exception e) {
-        System.err.println("Write error: " + e.getMessage());
-        e.printStackTrace();
-        safeCleanup(key);
+        } catch (Exception e) {
+            System.err.println("✗ Write error: " + e.getMessage());
+            e.printStackTrace();
+            safeCleanup(key);
+        }
     }
-}
 
     private void checkTimeouts(Selector selector) {
         long now = System.currentTimeMillis();
@@ -338,20 +302,20 @@ public class Server {
             long idle = now - ctx.lastActivityAt;
 
             if (!ctx.request.isRequestCompleted() && elapsed > headerTimeout) {
-                System.out.println("Header timeout (" + elapsed + "ms)");
+                System.out.println("⏱ Header timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
             if (ctx.request.isRequestCompleted() && !ctx.responseReady
                     && elapsed > bodyTimeout) {
-                System.out.println("Body processing timeout (" + elapsed + "ms)");
+                System.out.println("⏱ Body processing timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
             if (idle > idleTimeout) {
-                System.out.println("Idle timeout (" + idle + "ms)");
+                System.out.println("⏱ Idle timeout (" + idle + "ms)");
                 safeCleanup(key);
             }
         }
@@ -382,9 +346,8 @@ public class Server {
     }
 
     private void cleanup(SelectionKey key, SocketChannel client, ConnCtx ctx) {
-        // Cleanup CGI ila kan
         cgiHandler.cleanup(key);
-
+        
         try {
             ctx.request.closeBodyStreamIfOpen();
         } catch (Exception ignored) {

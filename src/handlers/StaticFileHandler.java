@@ -25,7 +25,6 @@ public class StaticFileHandler {
         try {
             if (Files.isDirectory(requestedPath)) {
                 if (!route.directoryListing) {
-                    // بحث عن index file
                     if (route.index != null) {
                         requestedPath = rootDir.resolve(route.index).normalize();
                         if (!Files.exists(requestedPath)) {
@@ -35,7 +34,6 @@ public class StaticFileHandler {
                         return HttpResponse.ErrorResponse(403, "Forbidden", "Directory listing not allowed", errorPages.get(403));
                     }
                 } else {
-                    // Directory listing
                     String requestPath = request.getPath();
                     final String requestPathNormalized = requestPath.endsWith("/") ? requestPath : requestPath + "/";
 
@@ -75,22 +73,18 @@ public class StaticFileHandler {
                 }
             }
             
-            // ✅ ملف واحد
             if (Files.exists(requestedPath) && !Files.isDirectory(requestedPath)) {
                 long fileSize = Files.size(requestedPath);
                 
                 HttpResponse res = new HttpResponse(200, "OK");
 
-                // تحديد Content-Type
                 String fileName = requestedPath.getFileName().toString();
                 String contentType = getContentType(fileName);
                 res.setHeaders("Content-Type", contentType);
 
-                // ✅ للملفات الكبيرة (> 1MB)، استعمل streaming
                 if (fileSize > 1024 * 1024) {
                     res.setBodyFile(requestedPath);
                 } else {
-                    // للملفات الصغيرة، اقرأ كاملاً
                     byte[] fileBytes = Files.readAllBytes(requestedPath);
                     res.setBody(new String(fileBytes, java.nio.charset.StandardCharsets.UTF_8));
                 }
@@ -106,7 +100,6 @@ public class StaticFileHandler {
         }
     }
     
-    // ✅ تحديد Content-Type
     private static String getContentType(String fileName) {
         if (fileName.endsWith(".html") || fileName.endsWith(".htm")) {
             return "text/html; charset=UTF-8";
