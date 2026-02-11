@@ -86,7 +86,7 @@ public class Server {
                 }
 
                 ServerSocketChannel server = ServerSocketChannel.open();
-                server.bind(new InetSocketAddress(sc.host, port));
+                server.bind(new InetSocketAddress(port));
                 server.configureBlocking(false);
 
                 SelectionKey key = server.register(selector, SelectionKey.OP_ACCEPT);
