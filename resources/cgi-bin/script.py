@@ -1,8 +1,5 @@
+#!/bin/python3
 import sys
-
-data = sys.stdin.read()
-print("Content-Type: text/plain\n")
-print("Hello CGI\n")
-print("Body: "+ data +"b\n")
-while True:
-    print("Enter something: ")
+for i in range(1000000):
+    print(i)
+    sys.stdout.flush()

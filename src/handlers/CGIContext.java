@@ -6,6 +6,8 @@ public class CGIContext {
     private final Process process;
     private final HttpRequest request;
     private final long startTime;
+    // thread reading process output
+    private Thread readerThread;
     
     public CGIContext(Process process, HttpRequest request, long startTime) {
         this.process = process;
@@ -23,5 +25,13 @@ public class CGIContext {
     
     public long getStartTime() {
         return startTime;
+    }
+
+    public void setReaderThread(Thread t) {
+        this.readerThread = t;
+    }
+
+    public Thread getReaderThread() {
+        return readerThread;
     }
 }

@@ -1,4 +1,6 @@
+
 import http.HttpRequest;
+import http.HttpResponse;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
@@ -32,6 +34,7 @@ public class Server {
         final SocketChannel client;
         final ByteBuffer readBuf;
         final HttpRequest request;
+        HttpResponse responseObj;
 
         ByteBuffer writeBuf;
         long connectedAt;
@@ -65,6 +68,7 @@ public class Server {
             this.connectedAt = System.currentTimeMillis();
             this.lastActivityAt = this.connectedAt;
             this.responseReady = false;
+            this.responseObj = null;
         }
 
         void updateActivity() {
@@ -109,7 +113,7 @@ public class Server {
         while (true) {
             // MOHIM: Check pending CGI 9BEL select
             checkAllPendingCGI(selector);
-            
+
             int ready = selector.select(200);
 
             // check timeouts
@@ -149,9 +153,9 @@ public class Server {
             if (key.isValid() && key.attachment() instanceof ConnCtx) {
                 ConnCtx ctx = (ConnCtx) key.attachment();
                 if (cgiHandler.hasPending(key)) {
-                    Map<Integer, String> errorPages = ctx.chosenServer != null && ctx.chosenServer.errorPages != null 
-                        ? ctx.chosenServer.errorPages 
-                        : new HashMap<>();
+                    Map<Integer, String> errorPages = ctx.chosenServer != null && ctx.chosenServer.errorPages != null
+                            ? ctx.chosenServer.errorPages
+                            : new HashMap<>();
                     cgiHandler.checkPendingCGI(key, errorPages);
                 }
             }
@@ -188,7 +192,6 @@ public class Server {
             int n = client.read(ctx.readBuf);
 
             if (n == -1) {
-
                 cleanup(key, client, ctx);
                 return;
             }
@@ -250,34 +253,74 @@ public class Server {
         }
     }
 
-    private void onWrite(SelectionKey key) {
+  private void onWrite(SelectionKey key) {
+    ConnCtx ctx = (ConnCtx) key.attachment();
+    SocketChannel client = ctx.client;
 
-        ConnCtx ctx = (ConnCtx) key.attachment();
-        SocketChannel client = ctx.client;
+    try {
+        // ✅ إنشاء الـ response أول مرة
+        if (ctx.responseObj == null && ctx.writeBuf == null) {
+            Router router = new Router(ctx.chosenServer, ctx.request, cgiHandler, key);
+            HttpResponse resp = router.route();
+            System.out.println("///////////// Generated response for " + resp);
+            
+            // إذا كان CGI pending
+            if (resp == null) {
+                return;
+            }
+            
+            ctx.responseObj = resp;
+        }
 
-        try {
-            if (ctx.writeBuf == null) {
-                Router router = new Router(ctx.chosenServer, ctx.request, cgiHandler, key);
-                http.HttpResponse resp = router.route();
-                
-                // Ila CGI, response ghadi yji later
-                if (resp == null) {
+        // ✅ إرسال تدريجي
+        if (ctx.responseObj != null) {
+            // فحص إذا انتهى
+            if (ctx.responseObj.isComplete()) {
+                ctx.responseObj.close();
+                cleanup(key, client, ctx);
+                return;
+            }
+            
+            // إذا لا يوجد buffer، احصل على chunk جديد
+                if (ctx.writeBuf == null || !ctx.writeBuf.hasRemaining()) {
+                ByteBuffer next = ctx.responseObj.getNextChunk(8192); // 8KB per chunk
+
+                if (next == null) {
+                    // لا توجد بيانات حاليا، نوقف الكتابة وننتظر وصول بيانات من الـ CGI reader
+                    key.interestOps(0);
                     return;
                 }
-                
-                ctx.writeBuf = resp.toByteBuffer();
+
+                ctx.writeBuf = next;
             }
+            
+            // اكتب
 
+            int written = client.write(ctx.writeBuf);
+            
+            if (written > 0) {
+                ctx.updateActivity();
+            }
+            
+            // إذا انتهى الـ buffer الحالي، سنحصل على واحد جديد في المرة القادمة
+            return;
+        }
+        
+        // ✅ الطريقة القديمة (للتوافق)
+        if (ctx.writeBuf != null) {
             client.write(ctx.writeBuf);
-
+            
             if (!ctx.writeBuf.hasRemaining()) {
                 cleanup(key, client, ctx);
             }
-
-        } catch (Exception e) {
-            safeCleanup(key);
         }
+
+    } catch (Exception e) {
+        System.err.println("Write error: " + e.getMessage());
+        e.printStackTrace();
+        safeCleanup(key);
     }
+}
 
     private void checkTimeouts(Selector selector) {
         long now = System.currentTimeMillis();
@@ -341,7 +384,7 @@ public class Server {
     private void cleanup(SelectionKey key, SocketChannel client, ConnCtx ctx) {
         // Cleanup CGI ila kan
         cgiHandler.cleanup(key);
-        
+
         try {
             ctx.request.closeBodyStreamIfOpen();
         } catch (Exception ignored) {

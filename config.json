@@ -1,4 +1,9 @@
 {
+    "timeouts": {
+        "body_ms": 10000000,
+        "header_ms": 5000000,
+        "keep_alive_ms": 1500000
+    },
     "servers": [
         {
             "name": "main",
@@ -9,7 +14,7 @@
                 9090
             ],
             "default_server": true,
-            "client_max_body_size": 1000000000000000,
+            "client_max_body_size": 10000000000,
             "error_pages": {
                 "400": "error_pages/400.html",
                 "403": "error_pages/403.html",
@@ -29,7 +34,7 @@
                     "index": "index.html",
                     "directory_listing": true
                 },
-                  {
+                {
                     "path": "/d",
                     "root": "resources/",
                     "methods": [
