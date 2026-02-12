@@ -1,5 +1,6 @@
 
 import http.HttpRequest;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
@@ -100,12 +101,11 @@ public class Server {
                 key.attach(info);
                 openedPorts.put(port, key);
 
-                System.out.println("✓ Listening on " + sc.host + ":" + port);
+                // System.out.println("✓ Listening on " + sc.host + ":" + port);
             }
         }
 
-        System.out.println("\n✓ Server started successfully!\n");
-
+        // System.out.println("\n✓ Server started successfully!\n");
         while (true) {
             checkAllPendingCGI(selector);
 
@@ -136,7 +136,7 @@ public class Server {
                     }
                 } catch (Exception e) {
                     System.err.println("✗ Event error: " + e.getMessage());
-                    e.printStackTrace();
+                    // e.printStackTrace();
                     safeCleanup(key);
                 }
             }
@@ -241,14 +241,25 @@ public class Server {
     private void onWrite(SelectionKey key) {
         ConnCtx ctx = (ConnCtx) key.attachment();
         SocketChannel client = ctx.client;
-
         try {
+
             if (ctx.isStreaming) {
-                if (ctx.writeBuf != null && ctx.writeBuf.hasRemaining()) {
-                    int written = client.write(ctx.writeBuf);
-                    if (written > 0) {
-                        ctx.updateActivity();
+                try {
+                    if (ctx.writeBuf != null && ctx.writeBuf.hasRemaining()) {
+                        int written = client.write(ctx.writeBuf);
+                        if (written > 0) {
+                            ctx.updateActivity();
+                        }
                     }
+
+                    if (ctx.writeBuf == null || !ctx.writeBuf.hasRemaining()) {
+                        ctx.writeBuf = null;
+                    }
+                } catch (IOException e) {
+                    System.err.println("[STREAM] Client disconnected: " + e.getMessage());
+                    // ctx.writeBuf = null;
+                    // ctx.isStreaming = false;
+                    cleanup(key, client, ctx); // destroy CGI process + remove from pending
                 }
 
                 if (ctx.writeBuf == null || !ctx.writeBuf.hasRemaining()) {
@@ -268,7 +279,6 @@ public class Server {
                     }
                     return;
                 }
-
                 if (resp.getBodyFile() != null) {
                     while (true) {
                         ByteBuffer chunk = resp.getNextChunk(8 * 1024);
@@ -303,8 +313,8 @@ public class Server {
             }
 
         } catch (Exception e) {
-            System.err.println("✗ Write error: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("✗ Write error: " + e.getMessage() + " " + e.getClass().getName());
+            // e.printStackTrace();
             safeCleanup(key);
         }
     }
@@ -325,20 +335,20 @@ public class Server {
             long idle = now - ctx.lastActivityAt;
 
             if (!ctx.request.isRequestCompleted() && elapsed > headerTimeout) {
-                System.out.println("⏱ Header timeout (" + elapsed + "ms)");
+                // System.out.println("⏱ Header timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
             if (ctx.request.isRequestCompleted() && !ctx.responseReady
                     && elapsed > bodyTimeout) {
-                System.out.println("⏱ Body processing timeout (" + elapsed + "ms)");
+                // System.out.println("⏱ Body processing timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
             if (idle > idleTimeout) {
-                System.out.println("⏱ Idle timeout (" + idle + "ms)");
+                // System.out.println("⏱ Idle timeout (" + idle + "ms)");
                 safeCleanup(key);
             }
         }

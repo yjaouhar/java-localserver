@@ -45,7 +45,6 @@ public class HttpResponse {
         this.body = body;
     }
 
-
     public synchronized void appendBody(byte[] data, int len) {
         if (data == null || len <= 0) {
             return;

@@ -72,16 +72,20 @@ public class StaticFileHandler {
                     return res;
                 }
             }
-            
+
             if (Files.exists(requestedPath) && !Files.isDirectory(requestedPath)) {
                 long fileSize = Files.size(requestedPath);
-                
+
                 HttpResponse res = new HttpResponse(200, "OK");
 
                 String fileName = requestedPath.getFileName().toString();
                 String contentType = getContentType(fileName);
-                res.setHeaders("Content-Type", contentType);
 
+                res.setHeaders("Content-Type", contentType);
+                res.setHeaders(
+                        "Content-Disposition",
+                        "attachment; filename=\"" + fileName + "\""
+                );
                 if (fileSize > 1024 * 1024) {
                     res.setBodyFile(requestedPath);
                 } else {
@@ -90,7 +94,7 @@ public class StaticFileHandler {
                 }
 
                 return res;
-                
+
             } else {
                 return HttpResponse.ErrorResponse(404, "Not Found", "File not found", errorPages.get(404));
             }
@@ -99,8 +103,9 @@ public class StaticFileHandler {
             return HttpResponse.ErrorResponse(500, "Server Error", e.getMessage(), errorPages.get(500));
         }
     }
-    
+
     private static String getContentType(String fileName) {
+
         if (fileName.endsWith(".html") || fileName.endsWith(".htm")) {
             return "text/html; charset=UTF-8";
         } else if (fileName.endsWith(".css")) {
