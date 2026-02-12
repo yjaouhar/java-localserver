@@ -38,13 +38,13 @@ public class HttpRequest {
     private long bodyWritten = 0;
 
     private Path bodyFile;
-    private FileChannel bodyChannel; 
+    private FileChannel bodyChannel;
 
     private final ByteArray lineBuf = new ByteArray(128);
     private int currentChunkSize = -1;
     private int remainingChunkBytes = 0;
 
-    private static final int MAX_WRITE_PER_CALL = 8192; 
+    private static final int MAX_WRITE_PER_CALL = 8192;
 
     public HttpRequest(List<AppConfig.ServerConfig> serverCfgs) {
         this.serverCfgs.addAll(serverCfgs);
@@ -141,8 +141,7 @@ public class HttpRequest {
         String hostHeader = HttpRequest.getHeaderIgnoreCase(this.getHeaders(), "Host");
 
         this.chosenServer = HttpRequest.chooseServerByHost(
-                this.serverCfgs, hostHeader
-        );
+                this.serverCfgs, hostHeader);
         System.out.println("server chosen:" + this.chosenServer.name);
         this.maxBodyBytes = (this.chosenServer != null)
                 ? this.chosenServer.clientMaxBodySize
@@ -151,9 +150,9 @@ public class HttpRequest {
 
     private void decideBodyMode() throws IOException {
         String host = getHeaderIgnoreCase(headers, "Host");
-        String cl   = getHeaderIgnoreCase(headers, "Content-Length");
+        String cl = getHeaderIgnoreCase(headers, "Content-Length");
         String ct = getHeaderIgnoreCase(headers, "Content-Type");
-        String te   = getHeaderIgnoreCase(headers, "Transfer-Encoding");
+        String te = getHeaderIgnoreCase(headers, "Transfer-Encoding");
 
         if ("HTTP/1.1".equals(version) && host == null) {
             state = State.DONE;
@@ -174,7 +173,7 @@ public class HttpRequest {
                 state = State.DONE;
                 throw new IllegalArgumentException("400 Bad Request: Both Content-Length and chunked");
             }
-        }   
+        }
         if (te != null && te.equalsIgnoreCase("chunked")) {
             isChunked = true;
             openBodyFile();
@@ -223,8 +222,7 @@ public class HttpRequest {
                 bodyFile,
                 StandardOpenOption.WRITE,
                 StandardOpenOption.CREATE,
-                StandardOpenOption.TRUNCATE_EXISTING
-        );
+                StandardOpenOption.TRUNCATE_EXISTING);
     }
 
     private void readFixedBody(ByteBuffer buf) throws IOException {
@@ -290,7 +288,7 @@ public class HttpRequest {
 
     private void readChunkData(ByteBuffer buf) throws IOException {
         int toWrite = Math.min(remainingChunkBytes, buf.remaining());
-        toWrite = Math.min(toWrite, MAX_WRITE_PER_CALL); 
+        toWrite = Math.min(toWrite, MAX_WRITE_PER_CALL);
 
         if (toWrite > 0) {
             byte[] chunk = new byte[toWrite];
@@ -353,7 +351,7 @@ public class HttpRequest {
 
     private void finishBody() throws IOException {
         if (bodyChannel != null) {
-            bodyChannel.force(false); 
+            bodyChannel.force(false);
             bodyChannel.close();
             bodyChannel = null;
         }
@@ -435,10 +433,11 @@ public class HttpRequest {
             List<AppConfig.ServerConfig> cfgs, String hostHeader) {
 
         String host = normalizeHost(hostHeader);
+        System.err.println("Host header: " + host);
 
         if (host != null) {
             for (AppConfig.ServerConfig sc : cfgs) {
-                if (sc.name != null && host.equals(sc.name)) {
+                if (sc.name != null && host.equals(sc.name) || host.equals(sc.host)) {
                     return sc;
                 }
             }
@@ -509,5 +508,4 @@ public class HttpRequest {
         }
     }
 
-    
 }
