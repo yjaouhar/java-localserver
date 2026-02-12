@@ -1,7 +1,7 @@
 {
     "timeouts": {
-        "body_ms": 10000000,
-        "header_ms": 5000000,
+        "body_ms": 8000000,
+        "header_ms": 3000000,
         "keep_alive_ms": 1500000
     },
     "servers": [
@@ -10,70 +10,67 @@
             "host": "127.0.0.1",
             "ports": [
                 8080,
-                8081,
-                9090
+                8081
             ],
-            "default_server": false,
-            "client_max_body_size": 10000000000,
+            "default_server": true,
+            "client_max_body_size": 1000000,
             "error_pages": {
                 "400": "error_pages/400.html",
                 "403": "error_pages/403.html",
                 "404": "error_pages/404.html",
                 "405": "error_pages/405.html",
                 "413": "error_pages/413.html",
-                "415": "error_pages/415.html",
                 "500": "error_pages/500.html"
             },
             "routes": [
                 {
                     "path": "/",
-                    "root": "resources/",
+                    "root": "resources",
                     "methods": [
                         "GET"
                     ],
                     "index": "index.html",
-                    "directory_listing": true
+                    "directory_listing": false,
+                    "default_file": "index.html"
                 },
                 {
-                    "path": "/d",
-                    "root": "resources/",
+                    "path": "/public",
+                    "root": "resources/public",
                     "methods": [
                         "GET"
                     ],
-                    "index": "index.html",
-                    "directory_listing": false
+                    "directory_listing": true,
+                    "default_file": "home.html"
                 },
                 {
                     "path": "/upload",
                     "root": "resources/uploads",
                     "methods": [
-                        "POST",
-                        "GET",
-                        "DELETE"
-                    ],
-                    "upload_dir": "resources/uploads",
-                    "directory_listing": true
-                },
-                {
-                    "path": "/delete",
-                    "root": "resources/uploads",
-                    "methods": [
-                        "DELETE"
-                    ]
-                },
-                {
-                    "path": "/cgi-bin",
-                    "root": "resources/",
-                    "methods": [
-                        "GET",
                         "POST"
                     ],
                     "upload_dir": "resources/uploads",
-                    "directory_listing": false,
+                    "directory_listing": false
+                },
+                {
+                    "path": "/cgi-bin",
+                    "root": "cgi",
+                    "methods": [
+                        "GET"
+                    ],
+                    "directory_listing": true,
                     "cgi": {
                         "extension": ".py",
                         "interpreter": "python3"
                     }
+                },
+                {
+                    "path": "/cgi",
+                    "root": "cgi",
+                    "methods": [
+                        "GET"
+                    ],
+                    "directory_listing": true
+                  
                 },
                 {
                     "path": "/old",
@@ -85,23 +82,27 @@
             ]
         },
         {
-            "name": "admin",
-            "host": "127.0.0.2",
+            "name": "secondary",
+            "host": "127.0.0.1",
             "ports": [
-                9090,
-                7070
+                9090
             ],
             "default_server": false,
-            "client_max_body_size": 500000,
+            "client_max_body_size": 2000000,
+            "error_pages": {
+                "404": "error_pages/404.html",
+                "500": "error_pages/500.html"
+            },
             "routes": [
                 {
                     "path": "/",
-                    "root": "templite",
+                    "root": "resources/admin",
                     "methods": [
                         "GET"
                     ],
                     "index": "dashboard.html",
-                    "directory_listing": false
+                    "directory_listing": false,
+                    "default_file": "dashboard.html"
                 }
             ]
         }

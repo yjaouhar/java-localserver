@@ -11,8 +11,8 @@ import utils.json.AppConfig;
 public class UploadHandler {
 
     public static HttpResponse handleUpload(AppConfig.RouteConfig route,
-                                           HttpRequest request,
-                                           Map<Integer, String> errorPages) {
+            HttpRequest request,
+            Map<Integer, String> errorPages) {
 
         if (request == null || !"POST".equals(request.getMethod())) {
             return HttpResponse.ErrorResponse(405, "Method Not Allowed",
@@ -36,12 +36,13 @@ public class UploadHandler {
 
         Path bodyFile = request.getBodyFile();
 
-        try (InputStream fin = new BufferedInputStream(Files.newInputStream(bodyFile));
-             PushbackInputStream in = new PushbackInputStream(fin, 1024 * 128)) { // 128KB pushback
+        try (InputStream fin = new BufferedInputStream(Files.newInputStream(bodyFile)); PushbackInputStream in = new PushbackInputStream(fin, 1024 * 128)) { // 128KB pushback
 
             String line;
             while ((line = readLine(in)) != null) {
-                if (line.equals(startBoundary)) break;
+                if (line.equals(startBoundary)) {
+                    break;
+                }
             }
             if (line == null) {
                 return HttpResponse.ErrorResponse(400, "Bad Request",
@@ -58,17 +59,19 @@ public class UploadHandler {
                     int idx = line.indexOf(":");
                     if (idx != -1) {
                         headers.put(line.substring(0, idx).trim(),
-                                    line.substring(idx + 1).trim());
+                                line.substring(idx + 1).trim());
                     }
                 }
 
-                if (headers.isEmpty()) break;
+                if (headers.isEmpty()) {
+                    break;
+                }
 
                 String cd = headers.get("Content-Disposition");
                 boolean isFile = cd != null && cd.contains("filename=");
 
                 if (isFile) {
-                    String filename = extractFilename(cd);
+                    String filename = extractFilename(cd).replaceAll(" ", "") + "_" + System.currentTimeMillis();
                     Path outFile = uploadDir.resolve(filename).normalize();
 
                     if (!outFile.startsWith(uploadDir)) {
@@ -87,12 +90,14 @@ public class UploadHandler {
                 }
 
                 line = readLine(in);
-                if (line == null) break;
+                if (line == null) {
+                    break;
+                }
 
                 if (line.equals(endBoundary)) {
-                    break; 
+                    break;
                 } else if (line.equals(startBoundary)) {
-                    continue; 
+                    continue;
                 } else {
                     break;
                 }
@@ -123,10 +128,14 @@ public class UploadHandler {
 
     private static String extractFilename(String cd) {
         int s = cd.indexOf("filename=\"");
-        if (s == -1) return "upload.bin";
+        if (s == -1) {
+            return "upload.bin";
+        }
         s += "filename=\"".length();
         int e = cd.indexOf("\"", s);
-        if (e == -1) return "upload.bin";
+        if (e == -1) {
+            return "upload.bin";
+        }
         return Paths.get(cd.substring(s, e)).getFileName().toString();
     }
 
@@ -134,19 +143,23 @@ public class UploadHandler {
         ByteArrayOutputStream line = new ByteArrayOutputStream();
         int b;
         while ((b = in.read()) != -1) {
-            if (b == '\n') break;
-            if (b != '\r') line.write(b);
+            if (b == '\n') {
+                break;
+            }
+            if (b != '\r') {
+                line.write(b);
+            }
         }
-        if (line.size() == 0 && b == -1) return null;
+        if (line.size() == 0 && b == -1) {
+            return null;
+        }
         return line.toString(StandardCharsets.ISO_8859_1);
     }
 
     // ================= CORE (FIXED) =================
-
-
     private static void copyPartBodyUntilBoundary(PushbackInputStream in,
-                                                 OutputStream out,
-                                                 String startBoundary) throws IOException {
+            OutputStream out,
+            String startBoundary) throws IOException {
 
         byte[] delim = ("\r\n" + startBoundary).getBytes(StandardCharsets.ISO_8859_1);
         int keep = delim.length - 1;
@@ -175,12 +188,13 @@ public class UploadHandler {
                 out.write(chunk, 0, writeLen);
                 tail = Arrays.copyOfRange(chunk, writeLen, chunk.length);
             } else {
-                tail = chunk; 
+                tail = chunk;
             }
         }
     }
+
     private static void discardPartBodyUntilBoundary(PushbackInputStream in,
-                                                    String startBoundary) throws IOException {
+            String startBoundary) throws IOException {
         byte[] delim = ("\r\n" + startBoundary).getBytes(StandardCharsets.ISO_8859_1);
         int keep = delim.length - 1;
 
@@ -193,7 +207,7 @@ public class UploadHandler {
 
             int pos = indexOf(chunk, delim);
             if (pos >= 0) {
-                int unreadFrom = pos + 2; 
+                int unreadFrom = pos + 2;
                 if (unreadFrom < chunk.length) {
                     in.unread(chunk, unreadFrom, chunk.length - unreadFrom);
                 }
@@ -217,11 +231,15 @@ public class UploadHandler {
     }
 
     private static int indexOf(byte[] data, byte[] pattern) {
-        if (pattern.length == 0) return 0;
+        if (pattern.length == 0) {
+            return 0;
+        }
         outer:
         for (int i = 0; i <= data.length - pattern.length; i++) {
             for (int j = 0; j < pattern.length; j++) {
-                if (data[i + j] != pattern[j]) continue outer;
+                if (data[i + j] != pattern[j]) {
+                    continue outer;
+                }
             }
             return i;
         }

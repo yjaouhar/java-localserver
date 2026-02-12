@@ -121,6 +121,7 @@ public class Router {
             }
 
             if (matchPath(reqPath, r.path)) {
+
                 int len = r.path.length();
                 if (len > bestLen) {
                     bestLen = len;
@@ -135,16 +136,12 @@ public class Router {
         if (reqPath == null || routePath == null) {
             return false;
         }
-
-        if (routePath.equals("/")) {
-            return true;
-        }
         if (reqPath.equals(routePath)) {
             return true;
         }
 
         String p = routePath.endsWith("/") ? routePath : routePath + "/";
-        return reqPath.startsWith(p);
+        return reqPath.startsWith(p) && !p.equals("/");
     }
 
     private static String buildEffectiveRoot(String routeRoot, String routePath, String reqPath) {
