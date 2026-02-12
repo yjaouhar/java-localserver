@@ -188,6 +188,7 @@ public class ConfigMapper {
 
             if (r.containsKey("methods")) {
                 List<Object> ms = asArray(r.get("methods"), path + ".methods");
+               
                 if (ms == null || ms.isEmpty()) {
                     return null;
                 }
@@ -195,6 +196,7 @@ public class ConfigMapper {
                 for (int i = 0; i < ms.size(); i++) {
                     String m = asString(ms.get(i), path + ".methods[" + i + "]");
                     if (m == null) {
+                        
                         return null;
                     }
                     m = m.trim().toUpperCase();

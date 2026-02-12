@@ -1,18 +1,159 @@
-<html>
-
+<!DOCTYPE html>
+<html lang="en">
 <head>
-    <title>Dashboard</title>
+<meta charset="UTF-8">
+<title>Java HTTP Server – Live Route Tester</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #0f172a;
+  color: #e5e7eb;
+}
+header {
+  background: #020617;
+  padding: 20px;
+  text-align: center;
+  border-bottom: 1px solid #1e293b;
+}
+h1 { color: #38bdf8; margin: 0; }
+
+.container {
+  max-width: 1000px;
+  margin: 40px auto;
+  padding: 20px;
+}
+
+.card {
+  background: #020617;
+  border: 1px solid #1e293b;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+button {
+  padding: 10px 16px;
+  background: #38bdf8;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+button:hover { background: #0ea5e9; }
+
+input[type="file"] {
+  margin-top: 10px;
+}
+
+pre {
+  background: #0f172a;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+
+.ok { color: #22c55e; }
+.err { color: #f87171; }
+</style>
 </head>
 
 <body>
-    <h1>Welcome to the Dashboard</h1>
-    <p>This is a simple dashboard page.</p>
-</body>
-<p>Use the navigation menu to access different sections of the dashboard.</p>
-<li>
-    <a href="/admin">Admin Dashboard</a>
-    <ul>dd</ul>
-</li>
-<p>Use the navigation menu to access different sections of the dashboard.</p>
 
+<header>
+  <h1>Java HTTP Server – Live Routes</h1>
+  <p>Click & test real endpoints</p>
+</header>
+
+<div class="container">
+
+  <!-- ROUTE / -->
+  <div class="card">
+    <h2>/</h2>
+    <p>GET static index</p>
+    <button onclick="go('/')">Open /</button>
+  </div>
+
+  <!-- ROUTE /upload -->
+  <div class="card">
+    <h2>/upload</h2>
+    <p>POST file upload</p>
+
+    <input type="file" id="file">
+    <br>
+    <button onclick="upload()">Upload File</button>
+
+    <pre id="uploadResult"></pre>
+  </div>
+
+  <!-- ROUTE /cgi-bin -->
+  <div class="card">
+    <h2>/cgi-bin/test.py</h2>
+    <p>Execute CGI script</p>
+    <button onclick="fetchRoute('/cgi-bin/test.py')">Run CGI</button>
+    <pre id="cgiResult"></pre>
+  </div>
+
+  <!-- ROUTE /old -->
+  <div class="card">
+    <h2>/old</h2>
+    <p>Redirect test</p>
+    <button onclick="fetchRoute('/old')">Test Redirect</button>
+    <pre id="redirectResult"></pre>
+  </div>
+
+</div>
+
+<script>
+const BASE = "http://127.0.0.1:8080";
+
+function go(path) {
+  window.open(BASE + path, "_blank");
+}
+
+async function fetchRoute(path) {
+  const res = await fetch(BASE + path, { redirect: "manual" });
+  const text = await res.text();
+
+  let box;
+  if (path.includes("cgi")) box = document.getElementById("cgiResult");
+  else box = document.getElementById("redirectResult");
+
+  box.textContent =
+    "Status: " + res.status + "\n\n" +
+    text.slice(0, 500);
+}
+
+async function upload() {
+  const fileInput = document.getElementById("file");
+  const result = document.getElementById("uploadResult");
+
+  if (!fileInput.files.length) {
+    result.textContent = "❌ Select a file first";
+    return;
+  }
+
+  const data = new FormData();
+  data.append("file", fileInput.files[0]);
+
+  try {
+    const res = await fetch(BASE + "/upload", {
+      method: "POST",
+      body: data
+    });
+
+    const text = await res.text();
+
+    result.textContent =
+      "Status: " + res.status + "\n\n" + text;
+
+  } catch (e) {
+    result.textContent = "❌ Upload failed";
+  }
+}
+</script>
+
+</body>
 </html>
