@@ -24,6 +24,7 @@ public class StaticFileHandler {
 
         try {
             if (Files.isDirectory(requestedPath)) {
+          
                 if (!route.directoryListing) {
                     if (route.index != null) {
                         requestedPath = rootDir.resolve(route.index).normalize();
@@ -68,29 +69,33 @@ public class StaticFileHandler {
 
                     HttpResponse res = new HttpResponse(200, "OK");
                     res.setHeaders("Content-Type", "text/html; charset=UTF-8");
-                    res.setBody(listing.toString());
+                    res.setBody(listing.toString().getBytes());
                     return res;
                 }
             }
-            
+
             if (Files.exists(requestedPath) && !Files.isDirectory(requestedPath)) {
                 long fileSize = Files.size(requestedPath);
-                
+
                 HttpResponse res = new HttpResponse(200, "OK");
 
                 String fileName = requestedPath.getFileName().toString();
                 String contentType = getContentType(fileName);
-                res.setHeaders("Content-Type", contentType);
 
+                res.setHeaders("Content-Type", contentType);
+                res.setHeaders(
+                        "Content-Disposition",
+                        "attachment; filename=\"" + fileName + "\""
+                );
                 if (fileSize > 1024 * 1024) {
                     res.setBodyFile(requestedPath);
                 } else {
                     byte[] fileBytes = Files.readAllBytes(requestedPath);
-                    res.setBody(new String(fileBytes, java.nio.charset.StandardCharsets.UTF_8));
+                    res.setBody(fileBytes);
                 }
 
                 return res;
-                
+
             } else {
                 return HttpResponse.ErrorResponse(404, "Not Found", "File not found", errorPages.get(404));
             }
@@ -99,8 +104,9 @@ public class StaticFileHandler {
             return HttpResponse.ErrorResponse(500, "Server Error", e.getMessage(), errorPages.get(500));
         }
     }
-    
+
     private static String getContentType(String fileName) {
+
         if (fileName.endsWith(".html") || fileName.endsWith(".htm")) {
             return "text/html; charset=UTF-8";
         } else if (fileName.endsWith(".css")) {

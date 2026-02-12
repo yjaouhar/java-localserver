@@ -6,6 +6,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import session.Session;
 import utils.json.AppConfig;
 
 public class HttpRequest {
@@ -39,6 +40,7 @@ public class HttpRequest {
 
     private Path bodyFile;
     private FileChannel bodyChannel;
+    private Session session;
 
     private final ByteArray lineBuf = new ByteArray(128);
     private int currentChunkSize = -1;
@@ -508,4 +510,39 @@ public class HttpRequest {
         }
     }
 
+    public void setSession(Session session) {
+        this.session = session;
+    }
+
+    public Session getSession() {
+        return this.session;
+    }
+
+    // public void reset() throws IOException {
+    //     // سد أي body مفتوح وحيد temp file
+    //     closeBodyStreamIfOpen();
+    //     // رجّع state machine للبداية
+    //     state = State.REQ_LINE_AND_HEADERS;
+    //     // مسح الهيدر
+    //     headers.clear();
+    //     headerBytes.clear();
+    //     headerEndIndex = -1;
+    //     // مسح request line
+    //     method = null;
+    //     path = null;
+    //     version = null;
+    //     // رجّع body state
+    //     isChunked = false;
+    //     contentLength = 0;
+    //     bodyWritten = 0;
+    //     bodyFile = null;
+    //     bodyChannel = null;
+    //     // رجّع chunk parsing
+    //     lineBuf.clear();
+    //     currentChunkSize = -1;
+    //     remainingChunkBytes = 0;
+    //     // رجّع server selection
+    //     chosenServer = null;
+    //     // ما نمسّوش serverCfgs (راه final)
+    // }
 }

@@ -61,13 +61,14 @@
                     ]
                 },
                 {
-                    "path": "/script.py",
-                    "root": "resources/cgi-bin",
+                    "path": "/cgi-bin",
+                    "root": "resources/",
                     "methods": [
                         "GET",
                         "POST"
                     ],
                     "upload_dir": "resources/uploads",
+                    "directory_listing": false,
                     "cgi": {
                         "extension": ".py",
                         "interpreter": "python3"

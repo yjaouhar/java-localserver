@@ -1,8 +1,13 @@
+
 import http.HttpRequest;
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.*;
+import session.Cookies;
+import session.Session;
+import session.SessionManager;
 import utils.json.AppConfig;
 
 public class Server {
@@ -11,6 +16,7 @@ public class Server {
     private final handlers.CGIHandler cgiHandler;
 
     static class ListenerInfo {
+
         final int port;
         final List<String> serverNames = new ArrayList<>();
         final List<AppConfig.ServerConfig> serverCfgs = new ArrayList<>();
@@ -18,7 +24,7 @@ public class Server {
         ListenerInfo(int port) {
             this.port = port;
         }
-        
+
         void addServer(AppConfig.ServerConfig sc) {
             serverNames.add(sc.name);
             serverCfgs.add(sc);
@@ -26,6 +32,7 @@ public class Server {
     }
 
     static class ConnCtx {
+
         final ListenerInfo listenerInfo;
         final SocketChannel client;
         final ByteBuffer readBuf;
@@ -71,7 +78,7 @@ public class Server {
 
     public Server(AppConfig appConfig) throws Exception {
         this.appConfig = appConfig;
-        this.cgiHandler = new handlers.CGIHandler(30);
+        this.cgiHandler = new handlers.CGIHandler(3);
 
         Selector selector = Selector.open();
         Map<Integer, SelectionKey> openedPorts = new HashMap<>();
@@ -97,15 +104,14 @@ public class Server {
                 key.attach(info);
                 openedPorts.put(port, key);
 
-                System.out.println("✓ Listening on " + sc.host + ":" + port);
+                // System.out.println("✓ Listening on " + sc.host + ":" + port);
             }
         }
 
-        System.out.println("\n✓ Server started successfully!\n");
-
+        // System.out.println("\n✓ Server started successfully!\n");
         while (true) {
             checkAllPendingCGI(selector);
-            
+
             int ready = selector.select(200);
 
             checkTimeouts(selector);
@@ -133,7 +139,7 @@ public class Server {
                     }
                 } catch (Exception e) {
                     System.err.println("✗ Event error: " + e.getMessage());
-                    e.printStackTrace();
+                    // e.printStackTrace();
                     safeCleanup(key);
                 }
             }
@@ -145,9 +151,9 @@ public class Server {
             if (key.isValid() && key.attachment() instanceof ConnCtx) {
                 ConnCtx ctx = (ConnCtx) key.attachment();
                 if (cgiHandler.hasPending(key)) {
-                    Map<Integer, String> errorPages = ctx.chosenServer != null && ctx.chosenServer.errorPages != null 
-                        ? ctx.chosenServer.errorPages 
-                        : new HashMap<>();
+                    Map<Integer, String> errorPages = ctx.chosenServer != null && ctx.chosenServer.errorPages != null
+                            ? ctx.chosenServer.errorPages
+                            : new HashMap<>();
                     cgiHandler.checkPendingCGI(key, errorPages);
                 }
             }
@@ -177,11 +183,11 @@ public class Server {
 
         try {
             ctx.readBuf.clear();
-            
+
             if (ctx.shouldLimitUpload(ctx.readBuf.capacity())) {
                 return;
             }
-            
+
             int n = client.read(ctx.readBuf);
 
             if (n == -1) {
@@ -209,7 +215,7 @@ public class Server {
             }
 
             String errPage = "";
-            if (ctx.chosenServer != null && ctx.chosenServer.errorPages != null 
+            if (ctx.chosenServer != null && ctx.chosenServer.errorPages != null
                     && ctx.chosenServer.errorPages.containsKey(400)) {
                 errPage = ctx.chosenServer.errorPages.get(400);
             }
@@ -224,7 +230,7 @@ public class Server {
             }
 
             String errPage = "";
-            if (ctx.chosenServer != null && ctx.chosenServer.errorPages != null 
+            if (ctx.chosenServer != null && ctx.chosenServer.errorPages != null
                     && ctx.chosenServer.errorPages.containsKey(500)) {
                 errPage = ctx.chosenServer.errorPages.get(500);
             }
@@ -238,39 +244,92 @@ public class Server {
     private void onWrite(SelectionKey key) {
         ConnCtx ctx = (ConnCtx) key.attachment();
         SocketChannel client = ctx.client;
-
         try {
+
             if (ctx.isStreaming) {
-                if (ctx.writeBuf != null && ctx.writeBuf.hasRemaining()) {
-                    int written = client.write(ctx.writeBuf);
-                    if (written > 0) {
-                        ctx.updateActivity();
+                try {
+                    if (ctx.writeBuf != null && ctx.writeBuf.hasRemaining()) {
+                        int written = client.write(ctx.writeBuf);
+                        if (written > 0) {
+                            ctx.updateActivity();
+                        }
                     }
+
+                    if (ctx.writeBuf == null || !ctx.writeBuf.hasRemaining()) {
+                        ctx.writeBuf = null;
+                    }
+                } catch (IOException e) {
+                    System.err.println("[STREAM] Client disconnected: " + e.getMessage());
+                    // ctx.writeBuf = null;
+                    // ctx.isStreaming = false;
+                    cleanup(key, client, ctx); // destroy CGI process + remove from pending
                 }
-                
+
                 if (ctx.writeBuf == null || !ctx.writeBuf.hasRemaining()) {
                     ctx.writeBuf = null;
                 }
-                
+
                 return;
             }
-            
+
             if (ctx.writeBuf == null) {
+                String cookieHeader = ctx.request.getHeader("Cookie");
+                Map<String, String> cookies = Cookies.parseCookies(cookieHeader);
+                Session session = null;
+
+                if (cookies.containsKey("SESSION_ID")) {
+                    session = SessionManager.getSession(cookies.get("SESSION_ID"));
+                }
+                boolean newSession = false;
+
+                if (session == null) {
+                    session = SessionManager.createSession(0); // 1h
+                    newSession = true;
+                }
+                ctx.request.setSession(session);
+
                 Router router = new Router(ctx.chosenServer, ctx.request, cgiHandler, key);
                 http.HttpResponse resp = router.route();
-                
+
                 if (resp == null) {
                     if (cgiHandler.hasPending(key)) {
                         ctx.isStreaming = true;
                     }
                     return;
                 }
-                
-                ctx.writeBuf = resp.toByteBuffer();
+                if (newSession) {
+                    Cookies c = new Cookies(
+                            "SESSION_ID",
+                            session.getSessionId(),
+                            3600
+                    );
+                    resp.setHeaders("Set-Cookie", c.generateCookieString());
+                }
+                if (resp.getBodyFile() != null) {
+                    while (true) {
+                        ByteBuffer chunk = resp.getNextChunk(8 * 1024);
+                        if (chunk == null) {
+                            break;
+                        }
+                        int written = client.write(chunk);
+                        if (written <= 0) {
+                            break;
+
+                        }
+                        ctx.updateActivity();
+                    }
+                    if (resp.getNextChunk(1) == null) {
+                        resp.close();
+                        resp = null;
+                        cleanup(key, client, ctx);
+                    }
+                } else {
+                    ctx.writeBuf = resp.toByteBuffer();
+                }
             }
 
             int written = client.write(ctx.writeBuf);
-            
+
             if (written > 0) {
                 ctx.updateActivity();
             }
@@ -280,8 +339,8 @@ public class Server {
             }
 
         } catch (Exception e) {
-            System.err.println("✗ Write error: " + e.getMessage());
-            e.printStackTrace();
+            System.err.println("✗ Write error: " + e.getMessage() + " " + e.getClass().getName());
+            // e.printStackTrace();
             safeCleanup(key);
         }
     }
@@ -302,20 +361,20 @@ public class Server {
             long idle = now - ctx.lastActivityAt;
 
             if (!ctx.request.isRequestCompleted() && elapsed > headerTimeout) {
-                System.out.println("⏱ Header timeout (" + elapsed + "ms)");
+                // System.out.println("⏱ Header timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
             if (ctx.request.isRequestCompleted() && !ctx.responseReady
                     && elapsed > bodyTimeout) {
-                System.out.println("⏱ Body processing timeout (" + elapsed + "ms)");
+                // System.out.println("⏱ Body processing timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
             if (idle > idleTimeout) {
-                System.out.println("⏱ Idle timeout (" + idle + "ms)");
+                // System.out.println("⏱ Idle timeout (" + idle + "ms)");
                 safeCleanup(key);
             }
         }
@@ -347,7 +406,7 @@ public class Server {
 
     private void cleanup(SelectionKey key, SocketChannel client, ConnCtx ctx) {
         cgiHandler.cleanup(key);
-        
+
         try {
             ctx.request.closeBodyStreamIfOpen();
         } catch (Exception ignored) {

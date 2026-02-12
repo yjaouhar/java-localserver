@@ -1,6 +1,8 @@
 package session;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 
 public class Cookies {
 
@@ -25,9 +27,27 @@ public class Cookies {
     public boolean isExpired(Instant createdAt) {
         return Instant.now().isAfter(createdAt.plusSeconds(maxAgeSeconds));
     }
-    public  String generateCookieString() {
-        String cookie = name + "=" + value + "; Max-Age="+ maxAgeSeconds+"; Path=/; HttpOnly";
+
+    public String generateCookieString() {
+        String cookie = name + "=" + value + "; Max-Age=" + maxAgeSeconds + "; Path=/; HttpOnly";
         return cookie;
 
-    }   
+    }
+
+    public static Map<String, String> parseCookies(String cookieHeader) {
+        Map<String, String> cookies = new HashMap<>();
+        if (cookieHeader == null) {
+            return cookies;
+        }
+
+        String[] pairs = cookieHeader.split(";");
+        for (String pair : pairs) {
+            String[] kv = pair.trim().split("=", 2);
+            if (kv.length == 2) {
+                cookies.put(kv[0], kv[1]);
+            }
+        }
+        return cookies;
+    }
+
 }

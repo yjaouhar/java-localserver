@@ -18,19 +18,16 @@ public class HttpResponse {
     private int statusCode;
     private String statusMessage;
     private Map<String, String> headers = new HashMap<>();
-    private String body = "";
-    
+    private byte[] body = new byte[0];
 
     private Path bodyFile;
     private FileChannel bodyFileChannel;
-    private long bodyFileSize;
+    public long bodyFileSize;
     private long bodyFileSent = 0;
-    
 
     private boolean headersSent = false;
 
     private boolean chunked = false;
-
 
     private java.io.ByteArrayOutputStream dynamicBody = new java.io.ByteArrayOutputStream();
     private boolean streamingFinished = false;
@@ -44,12 +41,14 @@ public class HttpResponse {
         headers.put(key, value);
     }
 
-    public void setBody(String body) {
+    public void setBody(byte[] body) {
         this.body = body;
     }
 
     public synchronized void appendBody(byte[] data, int len) {
-        if (data == null || len <= 0) return;
+        if (data == null || len <= 0) {
+            return;
+        }
         dynamicBody.write(data, 0, len);
     }
 
@@ -61,42 +60,44 @@ public class HttpResponse {
         this.chunked = true;
         headers.put("Transfer-Encoding", "chunked");
     }
-    
+
     public void setBodyFile(Path file) throws IOException {
         this.bodyFile = file;
         this.bodyFileSize = Files.size(file);
         this.bodyFileChannel = FileChannel.open(file, StandardOpenOption.READ);
-        
         headers.put("Content-Length", String.valueOf(bodyFileSize));
     }
 
-    public ByteBuffer getNextChunk(int maxSize) throws IOException {
+    public ByteBuffer getNextChunk(int maxSize) {
         if (!headersSent) {
             ByteBuffer headerBuf = buildHeaders();
             headersSent = true;
             return headerBuf;
         }
-        
         if (bodyFile != null && bodyFileChannel != null) {
             long remaining = bodyFileSize - bodyFileSent;
             if (remaining <= 0) {
-                return null; 
+                return null;
             }
-            
+
             int toRead = (int) Math.min(remaining, maxSize);
             ByteBuffer buf = ByteBuffer.allocate(toRead);
-            
-            int read = bodyFileChannel.read(buf);
-            if (read > 0) {
-                bodyFileSent += read;
-                buf.flip();
-                return buf;
-            }
-            
-            return null;
-            
-        } else {
+            try {
 
+                int read = bodyFileChannel.read(buf);
+                if (read > 0) {
+                    bodyFileSent += read;
+                    buf.flip();
+                    return buf;
+                }
+
+                return null;
+            } catch (Exception e) {
+                System.out.println("Error reading body file: " + e.getMessage());
+                return null;
+            }
+
+        } else {
             if (chunked) {
                 synchronized (this) {
                     byte[] data = dynamicBody.toByteArray();
@@ -127,29 +128,28 @@ public class HttpResponse {
                     }
                 }
             } else {
-                if (body.isEmpty()) {
+                if (body.length == 0) {
                     return null;
                 }
 
-                byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
-                body = ""; 
+                byte[] bodyBytes = body;
+                body = new byte[0];
                 return ByteBuffer.wrap(bodyBytes);
             }
         }
     }
-    
-    public boolean isComplete() throws IOException {
-        if (!headersSent) {
-            return false;
-        }
-        
-        if (bodyFile != null) {
-            return bodyFileSent >= bodyFileSize;
-        } else {
-            return body.isEmpty();
-        }
-    }
-    
+
+    // public boolean isComplete() throws IOException {
+    //     if (!headersSent) {
+    //         return false;
+    //     }
+    //     if (bodyFile != null) {
+    //         return bodyFileSent >= bodyFileSize;
+    //     } 
+    //     else {
+    //         return body.isEmpty();
+    //     }
+    // }
     public void close() throws IOException {
         if (bodyFileChannel != null) {
             bodyFileChannel.close();
@@ -159,7 +159,7 @@ public class HttpResponse {
 
     private ByteBuffer buildHeaders() {
         StringBuilder headerBuilder = new StringBuilder();
-        
+
         headerBuilder.append(version)
                 .append(" ")
                 .append(statusCode)
@@ -171,7 +171,7 @@ public class HttpResponse {
             if (bodyFile != null) {
                 headers.put("Content-Length", String.valueOf(bodyFileSize));
             } else {
-                byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+                byte[] bodyBytes = body;
                 headers.put("Content-Length", String.valueOf(bodyBytes.length));
             }
         }
@@ -186,7 +186,7 @@ public class HttpResponse {
         headerBuilder.append("\r\n");
 
         return ByteBuffer.wrap(
-            headerBuilder.toString().getBytes(StandardCharsets.UTF_8)
+                headerBuilder.toString().getBytes(StandardCharsets.UTF_8)
         );
     }
 
@@ -195,59 +195,58 @@ public class HttpResponse {
             if (bodyFile != null) {
                 return buildHeaders();
             }
-            
-            byte[] bodyBytes = body.getBytes(StandardCharsets.UTF_8);
+
+            byte[] bodyBytes = body;
 
             if (!headers.containsKey("Content-Length")) {
                 headers.put("Content-Length", String.valueOf(bodyBytes.length));
             }
 
             ByteBuffer headerBuf = buildHeaders();
-            
+
             ByteBuffer buffer = ByteBuffer.allocate(
-                headerBuf.remaining() + bodyBytes.length
+                    headerBuf.remaining() + bodyBytes.length
             );
 
             buffer.put(headerBuf);
             buffer.put(bodyBytes);
             buffer.flip();
-            
+
             headersSent = true;
-            body = ""; 
-            
+            body = new byte[0];
+
             return buffer;
-            
+
         } catch (Exception e) {
             e.printStackTrace();
             return ByteBuffer.allocate(0);
         }
     }
 
-
     public static HttpResponse ErrorResponse(int code, String message, String body, String errorPage) {
         HttpResponse res = new HttpResponse(code, message);
         res.setHeaders("Content-Type", "text/html; charset=UTF-8");
         res.setHeaders("Connection", "close");
-        
+
         if (errorPage != null && !errorPage.isEmpty()) {
             Path errorFile = Paths.get(errorPage);
             if (Files.exists(errorFile)) {
                 try {
                     String errorContent = new String(
-                        Files.readAllBytes(errorFile), 
-                        StandardCharsets.UTF_8
+                            Files.readAllBytes(errorFile),
+                            StandardCharsets.UTF_8
                     );
-                    res.setBody(errorContent);
+                    res.setBody(errorContent.getBytes());
                     return res;
-                } catch (Exception ignored) {}
+                } catch (Exception ignored) {
+                }
             }
         }
-        
 
         res.setBody(
-            "<html><body><h1>" + code + " " + message + "</h1>" +
-            (body != null && !body.isEmpty() ? "<p>" + body + "</p>" : "") +
-            "</body></html>"
+                ("<html><body><h1>" + code + " " + message + "</h1>"
+                        + (body != null && !body.isEmpty() ? "<p>" + body + "</p>" : "")
+                        + "</body></html>").getBytes()
         );
         return res;
     }
@@ -256,13 +255,41 @@ public class HttpResponse {
         HttpResponse res = new HttpResponse(code, message);
         res.setHeaders("Content-Type", "text/html; charset=UTF-8");
         res.setHeaders("Connection", "close");
-        res.setBody(body);
+        res.setBody(body.getBytes());
         return res;
     }
 
-  
-    public int getStatusCode() { return statusCode; }
-    public String getStatusMessage() { return statusMessage; }
-    public Map<String, String> getHeaders() { return headers; }
-    public String getBody() { return body; }
+    public void setConnectionFromRequest(HttpRequest req) {
+        String connHeader = req.getHeader("Connection");
+        if (connHeader != null && connHeader.equalsIgnoreCase("close")) {
+            headers.put("Connection", "close");
+        } else {
+            // default keep-alive if HTTP/1.1
+            if ("HTTP/1.1".equals(req.getVersion())) {
+                headers.put("Connection", "keep-alive");
+            } else {
+                headers.put("Connection", "close");
+            }
+        }
+    }
+
+    public int getStatusCode() {
+        return statusCode;
+    }
+
+    public String getStatusMessage() {
+        return statusMessage;
+    }
+
+    public Map<String, String> getHeaders() {
+        return headers;
+    }
+
+    public String getBody() {
+        return new String(body, StandardCharsets.UTF_8);
+    }
+
+    public Path getBodyFile() {
+        return bodyFile;
+    }
 }
