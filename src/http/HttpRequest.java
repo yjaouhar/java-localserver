@@ -6,6 +6,7 @@ import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
 import java.util.*;
+import session.Session;
 import utils.json.AppConfig;
 
 public class HttpRequest {
@@ -39,6 +40,7 @@ public class HttpRequest {
 
     private Path bodyFile;
     private FileChannel bodyChannel;
+    private Session session;
 
     private final ByteArray lineBuf = new ByteArray(128);
     private int currentChunkSize = -1;
@@ -506,6 +508,14 @@ public class HttpRequest {
             System.arraycopy(old, 0, nw, 0, old.length);
             return nw;
         }
+    }
+
+    public void setSession(Session session) {
+        this.session = session;
+    }
+
+    public Session getSession() {
+        return this.session;
     }
 
 }

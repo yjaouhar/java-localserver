@@ -5,6 +5,9 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.*;
 import java.util.*;
+import session.Cookies;
+import session.Session;
+import session.SessionManager;
 import utils.json.AppConfig;
 
 public class Server {
@@ -270,6 +273,21 @@ public class Server {
             }
 
             if (ctx.writeBuf == null) {
+                String cookieHeader = ctx.request.getHeader("Cookie");
+                Map<String, String> cookies = Cookies.parseCookies(cookieHeader);
+                Session session = null;
+
+                if (cookies.containsKey("SESSION_ID")) {
+                    session = SessionManager.getSession(cookies.get("SESSION_ID"));
+                }
+                boolean newSession = false;
+
+                if (session == null) {
+                    session = SessionManager.createSession(0); // 1h
+                    newSession = true;
+                }
+                ctx.request.setSession(session);
+
                 Router router = new Router(ctx.chosenServer, ctx.request, cgiHandler, key);
                 http.HttpResponse resp = router.route();
 
@@ -278,6 +296,14 @@ public class Server {
                         ctx.isStreaming = true;
                     }
                     return;
+                }
+                if (newSession) {
+                    Cookies c = new Cookies(
+                            "SESSION_ID",
+                            session.getSessionId(),
+                            3600
+                    );
+                    resp.setHeaders("Set-Cookie", c.generateCookieString());
                 }
                 if (resp.getBodyFile() != null) {
                     while (true) {
