@@ -47,7 +47,7 @@ public class Router {
         String path = stripQuery(request.getPath());
         String method = request.getMethod();
 
-        RouteConfig matchedRoute = findBestRoute(config.routes, path);
+        RouteConfig matchedRoute = findBestRoute(config.routes, path, method);
 
         // System.out.println("Routing request: " + method + " " + path + " Matched route: " + (matchedRoute == null ? "null" : matchedRoute.path));
         if (matchedRoute == null) {
@@ -107,7 +107,7 @@ public class Router {
         return config.errorPages.get(code);
     }
 
-    private static RouteConfig findBestRoute(List<RouteConfig> routes, String reqPath) {
+    private static RouteConfig findBestRoute(List<RouteConfig> routes, String reqPath, String methode) {
         if (routes == null || reqPath == null) {
             return null;
         }
@@ -120,8 +120,7 @@ public class Router {
                 continue;
             }
 
-            if (matchPath(reqPath, r.path)) {
-
+            if (matchPath(reqPath, r.path, methode)) {
                 int len = r.path.length();
                 if (len > bestLen) {
                     bestLen = len;
@@ -132,16 +131,18 @@ public class Router {
         return best;
     }
 
-    private static boolean matchPath(String reqPath, String routePath) {
+    private static boolean matchPath(String reqPath, String routePath, String method) {
         if (reqPath == null || routePath == null) {
             return false;
         }
         if (reqPath.equals(routePath)) {
             return true;
         }
-
         String p = routePath.endsWith("/") ? routePath : routePath + "/";
-        return reqPath.startsWith(p) && !p.equals("/");
+        if (p.equals(reqPath)) {
+            return true;
+        }
+        return reqPath.startsWith(p) && !p.equals("/") && !method.equals("POST");
     }
 
     private static String buildEffectiveRoot(String routeRoot, String routePath, String reqPath) {

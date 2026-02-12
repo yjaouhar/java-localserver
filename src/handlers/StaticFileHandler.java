@@ -24,7 +24,7 @@ public class StaticFileHandler {
 
         try {
             if (Files.isDirectory(requestedPath)) {
-          
+
                 if (!route.directoryListing) {
                     if (route.index != null) {
                         requestedPath = rootDir.resolve(route.index).normalize();
@@ -75,6 +75,9 @@ public class StaticFileHandler {
             }
 
             if (Files.exists(requestedPath) && !Files.isDirectory(requestedPath)) {
+                if (request.getPath().endsWith("/")) {
+                    return HttpResponse.ErrorResponse(404, "Not Found", "Index file not found", errorPages.get(404));
+                }
                 long fileSize = Files.size(requestedPath);
 
                 HttpResponse res = new HttpResponse(200, "OK");
