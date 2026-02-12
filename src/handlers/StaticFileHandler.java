@@ -68,7 +68,7 @@ public class StaticFileHandler {
 
                     HttpResponse res = new HttpResponse(200, "OK");
                     res.setHeaders("Content-Type", "text/html; charset=UTF-8");
-                    res.setBody(listing.toString());
+                    res.setBody(listing.toString().getBytes());
                     return res;
                 }
             }
@@ -86,7 +86,7 @@ public class StaticFileHandler {
                     res.setBodyFile(requestedPath);
                 } else {
                     byte[] fileBytes = Files.readAllBytes(requestedPath);
-                    res.setBody(new String(fileBytes, java.nio.charset.StandardCharsets.UTF_8));
+                    res.setBody(fileBytes);
                 }
 
                 return res;

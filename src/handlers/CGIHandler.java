@@ -191,7 +191,7 @@ public class CGIHandler {
         if (sep == -1) {
             HttpResponse res = new HttpResponse(200, "OK");
             res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
-            res.setBody(out);
+            res.setBody(out.getBytes());
             return res;
         }
 
@@ -211,7 +211,7 @@ public class CGIHandler {
             }
         }
 
-        res.setBody(body);
+        res.setBody(body.getBytes());
         return res;
     }
     
@@ -234,7 +234,7 @@ public class CGIHandler {
     private void sendSimpleResponse(SelectionKey key, String output) {
         HttpResponse res = new HttpResponse(200, "OK");
         res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
-        res.setBody(output);
+        res.setBody(output.getBytes());
         sendResponse(key, res);
     }
     

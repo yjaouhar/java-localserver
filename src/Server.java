@@ -1,3 +1,4 @@
+
 import http.HttpRequest;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -11,6 +12,7 @@ public class Server {
     private final handlers.CGIHandler cgiHandler;
 
     static class ListenerInfo {
+
         final int port;
         final List<String> serverNames = new ArrayList<>();
         final List<AppConfig.ServerConfig> serverCfgs = new ArrayList<>();
@@ -18,7 +20,7 @@ public class Server {
         ListenerInfo(int port) {
             this.port = port;
         }
-        
+
         void addServer(AppConfig.ServerConfig sc) {
             serverNames.add(sc.name);
             serverCfgs.add(sc);
@@ -26,6 +28,7 @@ public class Server {
     }
 
     static class ConnCtx {
+
         final ListenerInfo listenerInfo;
         final SocketChannel client;
         final ByteBuffer readBuf;
@@ -71,7 +74,7 @@ public class Server {
 
     public Server(AppConfig appConfig) throws Exception {
         this.appConfig = appConfig;
-        this.cgiHandler = new handlers.CGIHandler(30);
+        this.cgiHandler = new handlers.CGIHandler(3);
 
         Selector selector = Selector.open();
         Map<Integer, SelectionKey> openedPorts = new HashMap<>();
@@ -105,7 +108,7 @@ public class Server {
 
         while (true) {
             checkAllPendingCGI(selector);
-            
+
             int ready = selector.select(200);
 
             checkTimeouts(selector);
@@ -145,9 +148,9 @@ public class Server {
             if (key.isValid() && key.attachment() instanceof ConnCtx) {
                 ConnCtx ctx = (ConnCtx) key.attachment();
                 if (cgiHandler.hasPending(key)) {
-                    Map<Integer, String> errorPages = ctx.chosenServer != null && ctx.chosenServer.errorPages != null 
-                        ? ctx.chosenServer.errorPages 
-                        : new HashMap<>();
+                    Map<Integer, String> errorPages = ctx.chosenServer != null && ctx.chosenServer.errorPages != null
+                            ? ctx.chosenServer.errorPages
+                            : new HashMap<>();
                     cgiHandler.checkPendingCGI(key, errorPages);
                 }
             }
@@ -177,11 +180,11 @@ public class Server {
 
         try {
             ctx.readBuf.clear();
-            
+
             if (ctx.shouldLimitUpload(ctx.readBuf.capacity())) {
                 return;
             }
-            
+
             int n = client.read(ctx.readBuf);
 
             if (n == -1) {
@@ -209,7 +212,7 @@ public class Server {
             }
 
             String errPage = "";
-            if (ctx.chosenServer != null && ctx.chosenServer.errorPages != null 
+            if (ctx.chosenServer != null && ctx.chosenServer.errorPages != null
                     && ctx.chosenServer.errorPages.containsKey(400)) {
                 errPage = ctx.chosenServer.errorPages.get(400);
             }
@@ -224,7 +227,7 @@ public class Server {
             }
 
             String errPage = "";
-            if (ctx.chosenServer != null && ctx.chosenServer.errorPages != null 
+            if (ctx.chosenServer != null && ctx.chosenServer.errorPages != null
                     && ctx.chosenServer.errorPages.containsKey(500)) {
                 errPage = ctx.chosenServer.errorPages.get(500);
             }
@@ -247,30 +250,50 @@ public class Server {
                         ctx.updateActivity();
                     }
                 }
-                
+
                 if (ctx.writeBuf == null || !ctx.writeBuf.hasRemaining()) {
                     ctx.writeBuf = null;
                 }
-                
+
                 return;
             }
-            
+
             if (ctx.writeBuf == null) {
                 Router router = new Router(ctx.chosenServer, ctx.request, cgiHandler, key);
                 http.HttpResponse resp = router.route();
-                
+
                 if (resp == null) {
                     if (cgiHandler.hasPending(key)) {
                         ctx.isStreaming = true;
                     }
                     return;
                 }
-                
-                ctx.writeBuf = resp.toByteBuffer();
+
+                if (resp.getBodyFile() != null) {
+                    while (true) {
+                        ByteBuffer chunk = resp.getNextChunk(8 * 1024);
+                        if (chunk == null) {
+                            break;
+                        }
+                        int written = client.write(chunk);
+                        if (written <= 0) {
+                            break;
+
+                        }
+                        ctx.updateActivity();
+                    }
+                    if (resp.getNextChunk(1) == null) {
+                        resp.close();
+                        resp = null;
+                        cleanup(key, client, ctx);
+                    }
+                } else {
+                    ctx.writeBuf = resp.toByteBuffer();
+                }
             }
 
             int written = client.write(ctx.writeBuf);
-            
+
             if (written > 0) {
                 ctx.updateActivity();
             }
@@ -347,7 +370,7 @@ public class Server {
 
     private void cleanup(SelectionKey key, SocketChannel client, ConnCtx ctx) {
         cgiHandler.cleanup(key);
-        
+
         try {
             ctx.request.closeBodyStreamIfOpen();
         } catch (Exception ignored) {
