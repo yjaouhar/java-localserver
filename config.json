@@ -48,7 +48,8 @@
                     "root": "resources/uploads",
                     "methods": [
                         "POST",
-                        "GET"
+                        "GET",
+                        "DELETE"
                     ],
                     "upload_dir": "resources/uploads",
                     "directory_listing": true
