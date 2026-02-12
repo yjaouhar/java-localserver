@@ -259,6 +259,20 @@ public class HttpResponse {
         return res;
     }
 
+    public void setConnectionFromRequest(HttpRequest req) {
+        String connHeader = req.getHeader("Connection");
+        if (connHeader != null && connHeader.equalsIgnoreCase("close")) {
+            headers.put("Connection", "close");
+        } else {
+            // default keep-alive if HTTP/1.1
+            if ("HTTP/1.1".equals(req.getVersion())) {
+                headers.put("Connection", "keep-alive");
+            } else {
+                headers.put("Connection", "close");
+            }
+        }
+    }
+
     public int getStatusCode() {
         return statusCode;
     }

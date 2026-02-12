@@ -31,6 +31,8 @@ public class CGIHandler {
         if (!scriptPath.startsWith(Paths.get(route.root))
                 || !Files.exists(scriptPath)
                 || Files.isDirectory(scriptPath)) {
+            System.out.println("*****-------- : " + scriptPath);
+
             sendErrorResponse(clientKey, 404, "Not Found", "CGI script not found", errorPages.get(404));
             return;
         }
@@ -217,7 +219,6 @@ public class CGIHandler {
     }
 
     private void sendResponse(SelectionKey key, HttpResponse response) {
-        System.out.println("((((((((((((((((((( " + response.getBody() + "  ))))))))))))))))");
         Object attachment = key.attachment();
         if (attachment != null) {
             try {

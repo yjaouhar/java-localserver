@@ -518,4 +518,31 @@ public class HttpRequest {
         return this.session;
     }
 
+    // public void reset() throws IOException {
+    //     // سد أي body مفتوح وحيد temp file
+    //     closeBodyStreamIfOpen();
+    //     // رجّع state machine للبداية
+    //     state = State.REQ_LINE_AND_HEADERS;
+    //     // مسح الهيدر
+    //     headers.clear();
+    //     headerBytes.clear();
+    //     headerEndIndex = -1;
+    //     // مسح request line
+    //     method = null;
+    //     path = null;
+    //     version = null;
+    //     // رجّع body state
+    //     isChunked = false;
+    //     contentLength = 0;
+    //     bodyWritten = 0;
+    //     bodyFile = null;
+    //     bodyChannel = null;
+    //     // رجّع chunk parsing
+    //     lineBuf.clear();
+    //     currentChunkSize = -1;
+    //     remainingChunkBytes = 0;
+    //     // رجّع server selection
+    //     chosenServer = null;
+    //     // ما نمسّوش serverCfgs (راه final)
+    // }
 }

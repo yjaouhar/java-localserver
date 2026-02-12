@@ -50,7 +50,6 @@ public class Router {
         RouteConfig matchedRoute = findBestRoute(config.routes, path);
 
         // System.out.println("Routing request: " + method + " " + path + " Matched route: " + (matchedRoute == null ? "null" : matchedRoute.path));
-
         if (matchedRoute == null) {
             return HttpResponse.ErrorResponse(404, "Not Found",
                     "No matching route", errorPage(404));
@@ -70,6 +69,7 @@ public class Router {
 
         if (matchedRoute.cgi != null) {
             try {
+
                 cgiHandler.executeCGI(clientKey, matchedRoute, request, config.errorPages);
                 return null;
             } catch (Exception e) {

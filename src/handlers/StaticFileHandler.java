@@ -24,6 +24,7 @@ public class StaticFileHandler {
 
         try {
             if (Files.isDirectory(requestedPath)) {
+          
                 if (!route.directoryListing) {
                     if (route.index != null) {
                         requestedPath = rootDir.resolve(route.index).normalize();
