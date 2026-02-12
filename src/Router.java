@@ -1,3 +1,4 @@
+
 import handlers.CGIHandler;
 import handlers.StaticFileHandler;
 import http.HttpRequest;
@@ -48,7 +49,7 @@ public class Router {
 
         RouteConfig matchedRoute = findBestRoute(config.routes, path);
 
-        System.out.println("Routing request: " + method + " " + path + " Matched route: " + (matchedRoute == null ? "null" : matchedRoute.path));
+        // System.out.println("Routing request: " + method + " " + path + " Matched route: " + (matchedRoute == null ? "null" : matchedRoute.path));
 
         if (matchedRoute == null) {
             return HttpResponse.ErrorResponse(404, "Not Found",
@@ -89,7 +90,7 @@ public class Router {
             if (Boolean.TRUE.equals(matchedRoute.directoryListing)) {
                 RouteConfig effective = copyRoute(matchedRoute);
                 effective.root = buildEffectiveRoot(matchedRoute.root, matchedRoute.path, path);
-                System.out.println("Effective root for directory listing: " + effective.root);
+                // System.out.println("Effective root for directory listing: " + effective.root);
                 return StaticFileHandler.handle(request, effective, config.errorPages);
             }
             return StaticFileHandler.handle(request, matchedRoute, config.errorPages);
