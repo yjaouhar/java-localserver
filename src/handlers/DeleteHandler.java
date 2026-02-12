@@ -23,12 +23,13 @@ public class DeleteHandler {
         }
 
         String filePath = DeleteHandler.extractFileName(route.path, request.getPath());
+        // System.out.println("______________ " + filePath);
         if (filePath == null || filePath.isEmpty()) {
             return HttpResponse.ErrorResponse(400, "Bad Request", "File path is missing", errorPages.get(400));
         }
         Path uploadDir = Paths.get(route.root);
         Path target = Paths.get(route.root, filePath).normalize();
-        if (!target.startsWith(uploadDir)) {
+        if (!target.startsWith(uploadDir) || filePath.endsWith("/")) {
             return HttpResponse.ErrorResponse(403, "Forbidden", "Access to the specified path is forbidden",
                     errorPages.get(403));
         }
