@@ -97,23 +97,25 @@ public class HttpRequest {
             }
 
             if (headerBytes.size() > 64 * 1024) {
-                throw new IllegalArgumentException("400 Header too large");
+                state = State.DONE;
+                throw new IllegalArgumentException("400");
             }
         }
     }
 
     private void parseHeaders() {
-        String headerText = new String(headerBytes.toArray(0, headerEndIndex),
-                StandardCharsets.ISO_8859_1);
+        String headerText = new String(headerBytes.toArray(0, headerEndIndex), StandardCharsets.ISO_8859_1);
         String[] lines = headerText.split("\r\n");
 
         if (lines.length == 0) {
-            throw new IllegalArgumentException("400 Bad request");
+            state = State.DONE;
+            throw new IllegalArgumentException("400");
         }
 
         String[] reqLine = lines[0].split(" ");
         if (reqLine.length < 3) {
-            throw new IllegalArgumentException("400 Bad request line");
+            state = State.DONE;
+            throw new IllegalArgumentException("400");
         }
 
         method = reqLine[0].toUpperCase();
@@ -121,7 +123,14 @@ public class HttpRequest {
         version = reqLine[2];
 
         if (!version.startsWith("HTTP/")) {
-            throw new IllegalArgumentException("400 Bad HTTP version");
+            state = State.DONE;
+            throw new IllegalArgumentException("400");
+        }
+
+        if (!method.equals("GET") && !method.equals("POST") && !method.equals("DELETE")
+                && !method.equals("PUT") && !method.equals("PATCH") && !method.equals("HEAD")) {
+            state = State.DONE;
+            throw new IllegalArgumentException("400");
         }
 
         for (int i = 1; i < lines.length; i++) {
@@ -140,14 +149,17 @@ public class HttpRequest {
             headers.put(k, v);
         }
 
-        String hostHeader = HttpRequest.getHeaderIgnoreCase(this.getHeaders(), "Host");
+        String hostHeader = getHeaderIgnoreCase(this.getHeaders(), "Host");
+        this.chosenServer = chooseServerByHost(this.serverCfgs, hostHeader);
 
-        this.chosenServer = HttpRequest.chooseServerByHost(
-                this.serverCfgs, hostHeader);
-        System.out.println("server chosen:" + this.chosenServer.name);
+        if (this.chosenServer == null) {
+            state = State.DONE;
+            throw new IllegalArgumentException("400");
+        }
+
         this.maxBodyBytes = (this.chosenServer != null)
                 ? this.chosenServer.clientMaxBodySize
-                : 1048576L; // default 1 MB
+                : 1048576L;
     }
 
     private void decideBodyMode() throws IOException {
@@ -158,7 +170,7 @@ public class HttpRequest {
 
         if ("HTTP/1.1".equals(version) && host == null) {
             state = State.DONE;
-            throw new IllegalArgumentException("400 Bad Request: Missing Host header");
+            throw new IllegalArgumentException("400");
         }
 
         boolean methodMayHaveBody = method.equals("POST") || method.equals("PUT") || method.equals("PATCH");
@@ -169,14 +181,15 @@ public class HttpRequest {
 
             if (!hasCL && !hasChunked) {
                 state = State.DONE;
-                throw new IllegalArgumentException("411 Length Required");
+                throw new IllegalArgumentException("411");
             }
             if (hasCL && hasChunked) {
                 state = State.DONE;
-                throw new IllegalArgumentException("400 Bad Request: Both Content-Length and chunked");
+                throw new IllegalArgumentException("400");
             }
         }
-        if (te != null && te.equalsIgnoreCase("chunked")) {
+
+        if (te != null && te.toLowerCase().contains("chunked")) {
             isChunked = true;
             openBodyFile();
             state = State.CHUNK_SIZE_LINE;
@@ -187,19 +200,23 @@ public class HttpRequest {
             try {
                 contentLength = Long.parseLong(cl.trim());
             } catch (NumberFormatException e) {
-                throw new IllegalArgumentException("400 Bad Content-Length");
+                state = State.DONE;
+                throw new IllegalArgumentException("400");
             }
 
             if (contentLength < 0) {
-                throw new IllegalArgumentException("400 Bad Content-Length");
+                state = State.DONE;
+                throw new IllegalArgumentException("400");
             }
             if (contentLength == 0) {
                 state = State.DONE;
                 return;
             }
             if (contentLength > maxBodyBytes) {
-                throw new IllegalArgumentException("413 Payload Too Large");
+                state = State.DONE;
+                throw new IllegalArgumentException("413");
             }
+
             openBodyFile();
             state = State.BODY_FIXED;
             return;
@@ -237,6 +254,10 @@ public class HttpRequest {
         int toWrite = (int) Math.min(remaining, buf.remaining());
         toWrite = Math.min(toWrite, MAX_WRITE_PER_CALL);
 
+        if (toWrite <= 0) {
+            return;
+        }
+
         byte[] chunk = new byte[toWrite];
         buf.get(chunk);
         writeBodyBytes(chunk, 0, toWrite);
@@ -253,8 +274,7 @@ public class HttpRequest {
 
             int n = lineBuf.size();
             if (n >= 2 && lineBuf.get(n - 2) == '\r' && lineBuf.get(n - 1) == '\n') {
-                String line = new String(lineBuf.toArray(0, n - 2),
-                        StandardCharsets.ISO_8859_1).trim();
+                String line = new String(lineBuf.toArray(0, n - 2), StandardCharsets.ISO_8859_1).trim();
                 lineBuf.clear();
 
                 int semiIdx = line.indexOf(';');
@@ -265,11 +285,13 @@ public class HttpRequest {
                 try {
                     currentChunkSize = Integer.parseInt(line, 16);
                 } catch (NumberFormatException e) {
-                    throw new IllegalArgumentException("400 Bad chunk size");
+                    state = State.DONE;
+                    throw new IllegalArgumentException("400");
                 }
 
                 if (currentChunkSize < 0) {
-                    throw new IllegalArgumentException("400 Bad chunk size");
+                    state = State.DONE;
+                    throw new IllegalArgumentException("400");
                 }
 
                 if (currentChunkSize == 0) {
@@ -283,7 +305,8 @@ public class HttpRequest {
             }
 
             if (lineBuf.size() > 64) {
-                throw new IllegalArgumentException("400 Chunk size line too long");
+                state = State.DONE;
+                throw new IllegalArgumentException("400");
             }
         }
     }
@@ -313,7 +336,8 @@ public class HttpRequest {
         byte n = buf.get();
 
         if (r != '\r' || n != '\n') {
-            throw new IllegalArgumentException("400 Bad chunk ending");
+            state = State.DONE;
+            throw new IllegalArgumentException("400");
         }
 
         state = State.CHUNK_SIZE_LINE;
@@ -334,7 +358,8 @@ public class HttpRequest {
             }
 
             if (lineBuf.size() > 8 * 1024) {
-                throw new IllegalArgumentException("400 Trailers too large");
+                state = State.DONE;
+                throw new IllegalArgumentException("413");
             }
         }
     }
@@ -342,7 +367,8 @@ public class HttpRequest {
     private void writeBodyBytes(byte[] b, int off, int len) throws IOException {
         bodyWritten += len;
         if (bodyWritten > maxBodyBytes) {
-            throw new IllegalArgumentException("413 Payload Too Large");
+            state = State.DONE;
+            throw new IllegalArgumentException("413");
         }
 
         ByteBuffer buffer = ByteBuffer.wrap(b, off, len);
@@ -366,7 +392,6 @@ public class HttpRequest {
                 bodyChannel.close();
             } catch (Exception ignored) {
             }
-
             bodyChannel = null;
         }
 
@@ -422,7 +447,6 @@ public class HttpRequest {
         if (headers == null || key == null) {
             return null;
         }
-
         for (String k : headers.keySet()) {
             if (k != null && k.equalsIgnoreCase(key)) {
                 return headers.get(k);
@@ -435,11 +459,10 @@ public class HttpRequest {
             List<AppConfig.ServerConfig> cfgs, String hostHeader) {
 
         String host = normalizeHost(hostHeader);
-        System.err.println("Host header: " + host);
 
         if (host != null) {
             for (AppConfig.ServerConfig sc : cfgs) {
-                if (sc.name != null && host.equals(sc.name) || host.equals(sc.host)) {
+                if ((sc.name != null && host.equals(sc.name)) || (sc.host != null && host.equals(sc.host))) {
                     return sc;
                 }
             }
@@ -458,7 +481,6 @@ public class HttpRequest {
         if (hostHeader == null) {
             return null;
         }
-
         String h = hostHeader.trim().toLowerCase();
         int idx = h.indexOf(':');
         if (idx != -1) {
@@ -468,7 +490,6 @@ public class HttpRequest {
     }
 
     private static final class ByteArray {
-
         private byte[] a;
         private int n;
 
@@ -517,32 +538,4 @@ public class HttpRequest {
     public Session getSession() {
         return this.session;
     }
-
-    // public void reset() throws IOException {
-    //     // سد أي body مفتوح وحيد temp file
-    //     closeBodyStreamIfOpen();
-    //     // رجّع state machine للبداية
-    //     state = State.REQ_LINE_AND_HEADERS;
-    //     // مسح الهيدر
-    //     headers.clear();
-    //     headerBytes.clear();
-    //     headerEndIndex = -1;
-    //     // مسح request line
-    //     method = null;
-    //     path = null;
-    //     version = null;
-    //     // رجّع body state
-    //     isChunked = false;
-    //     contentLength = 0;
-    //     bodyWritten = 0;
-    //     bodyFile = null;
-    //     bodyChannel = null;
-    //     // رجّع chunk parsing
-    //     lineBuf.clear();
-    //     currentChunkSize = -1;
-    //     remainingChunkBytes = 0;
-    //     // رجّع server selection
-    //     chosenServer = null;
-    //     // ما نمسّوش serverCfgs (راه final)
-    // }
 }

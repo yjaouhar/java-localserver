@@ -213,14 +213,20 @@ public class Server {
             if (ctx.request.getChosenServer() != null) {
                 ctx.chosenServer = ctx.request.getChosenServer();
             }
+            int code = 400; // default
 
+            try {
+                code = Integer.parseInt(e.getMessage().trim());
+            } catch (Exception ignored) {
+            }
+            String reason = getReasonPhrase(code);
             String errPage = "";
             if (ctx.chosenServer != null && ctx.chosenServer.errorPages != null
                     && ctx.chosenServer.errorPages.containsKey(400)) {
                 errPage = ctx.chosenServer.errorPages.get(400);
             }
 
-            ctx.writeBuf = http.HttpResponse.ErrorResponse(400, "Bad Request", "", errPage).toByteBuffer();
+            ctx.writeBuf = http.HttpResponse.ErrorResponse(code, reason, "", errPage).toByteBuffer();
             ctx.responseReady = true;
             key.interestOps(SelectionKey.OP_WRITE);
 
@@ -238,7 +244,7 @@ public class Server {
             ctx.writeBuf = http.HttpResponse.ErrorResponse(500, "Internal Server Error", "", errPage).toByteBuffer();
             ctx.responseReady = true;
             key.interestOps(SelectionKey.OP_WRITE);
-            
+
         }
     }
 
@@ -403,6 +409,7 @@ public class Server {
     }
 
     private void cleanup(SelectionKey key, SocketChannel client, ConnCtx ctx) {
+        // System.out.println("✓ Cleaning up connection sample");
         cgiHandler.cleanup(key);
 
         try {
@@ -422,6 +429,7 @@ public class Server {
     }
 
     private void safeCleanup(SelectionKey key) {
+        System.out.println("✓ Cleaning up connection");
         try {
             Object att = key.attachment();
             if (att instanceof ConnCtx) {
@@ -434,4 +442,26 @@ public class Server {
         } catch (Exception ignored) {
         }
     }
+
+    private String getReasonPhrase(int code) {
+        switch (code) {
+            case 400:
+                return "Bad Request";
+            case 403:
+                return "Forbidden";
+            case 404:
+                return "Not Found";
+            case 405:
+                return "Method Not Allowed";
+            case 411:
+                return "Length Required";
+            case 413:
+                return "Payload Too Large";
+            case 500:
+                return "Internal Server Error";
+            default:
+                return "Error";
+        }
+    }
+
 }

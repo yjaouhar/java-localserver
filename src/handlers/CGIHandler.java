@@ -19,9 +19,6 @@ public class CGIHandler {
         this.cgiTimeout = timeoutSeconds;
     }
 
-    /**
-     * بدء CGI (non-blocking)
-     */
     public void executeCGI(SelectionKey clientKey, RouteConfig route,
             HttpRequest request, Map<Integer, String> errorPages) throws IOException {
 
@@ -31,8 +28,7 @@ public class CGIHandler {
         if (!scriptPath.startsWith(Paths.get(route.root))
                 || !Files.exists(scriptPath)
                 || Files.isDirectory(scriptPath)) {
-            System.out.println("*****-------- : " + scriptPath);
-
+            System.out.println("[CGI] Script not found: " + scriptPath);
             sendErrorResponse(clientKey, 404, "Not Found", "CGI script not found", errorPages.get(404));
             return;
         }
@@ -70,7 +66,7 @@ public class CGIHandler {
 
         try {
             OutputStream stdin = process.getOutputStream();
-            if (bodyFile != null && contentLen > 0) {
+            if (bodyFile != null && contentLen > 0 && contentLen < 1024 * 1024) {
                 byte[] bodyBytes = Files.readAllBytes(bodyFile);
                 stdin.write(bodyBytes);
             }
@@ -100,8 +96,9 @@ public class CGIHandler {
         Process process = ctx.getProcess();
         long elapsed = System.currentTimeMillis() - ctx.getStartTime();
 
+        // Timeout check
         if (elapsed > cgiTimeout * 1000) {
-            System.err.println("[CGI] Timeout");
+            System.err.println("[CGI] Timeout after " + elapsed + "ms");
             process.destroyForcibly();
 
             String output = ctx.getCollectedOutput();
@@ -116,21 +113,31 @@ public class CGIHandler {
         }
 
         try {
+            // Read available output
             ctx.readAvailableOutput();
+
+            // Check if process finished
             if (!process.isAlive()) {
-                System.out.println("[CGI] Process finished");
+                System.out.println("[CGI] Process finished (exit code: " + process.exitValue() + ")");
                 ctx.readRemainingOutput();
 
                 String output = ctx.getCollectedOutput();
+                System.out.println("[CGI] Total output: " + output.length() + " bytes");
+                
                 HttpResponse response = parseCGIResponse(output);
+                
+                // ✅ مهم جداً: إيقاف streaming mode قبل الإرسال
+                markStreamingFinished(clientKey);
+                
                 sendResponse(clientKey, response);
-
                 pendingCGI.remove(clientKey);
-                System.out.println("[CGI] Sent " + output.length() + " bytes");
+                
+                System.out.println("[CGI] Response sent");
             }
 
         } catch (IOException e) {
             System.err.println("[CGI] Error: " + e.getMessage());
+            e.printStackTrace();
             sendErrorResponse(clientKey, 500, "Internal Server Error", "CGI Error", errorPages.get(500));
             pendingCGI.remove(clientKey);
         }
@@ -154,8 +161,9 @@ public class CGIHandler {
                 byte[] buffer = new byte[stdout.available()];
                 int read = stdout.read(buffer);
                 if (read > 0) {
-                    outputBuffer.append(new String(buffer, 0, read, StandardCharsets.UTF_8));
-                    System.out.print(new String(buffer, 0, read, StandardCharsets.UTF_8));
+                    String data = new String(buffer, 0, read, StandardCharsets.UTF_8);
+                    outputBuffer.append(data);
+                    System.out.print(data);
                 }
             }
 
@@ -183,6 +191,25 @@ public class CGIHandler {
     }
 
     // ================= Helper Methods =================
+    
+    /**
+     * ✅ إيقاف streaming mode في ConnCtx
+     */
+    private void markStreamingFinished(SelectionKey key) {
+        Object attachment = key.attachment();
+        if (attachment != null) {
+            try {
+                java.lang.reflect.Field streamingField = attachment.getClass().getDeclaredField("isStreaming");
+                streamingField.setAccessible(true);
+                streamingField.set(attachment, false);
+                
+                System.out.println("[CGI] Streaming mode disabled");
+            } catch (Exception e) {
+                System.err.println("[CGI] Failed to disable streaming: " + e.getMessage());
+            }
+        }
+    }
+    
     private HttpResponse parseCGIResponse(String out) {
         int sep = out.indexOf("\n\n");
         if (sep == -1) {
@@ -190,9 +217,11 @@ public class CGIHandler {
         }
 
         if (sep == -1) {
+            // No headers found - treat as plain text
             HttpResponse res = new HttpResponse(200, "OK");
             res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
-            res.setBody(out.getBytes());
+            res.setBody(out.getBytes(StandardCharsets.UTF_8));
+            System.out.println("[CGI] No headers found, using plain text");
             return res;
         }
 
@@ -201,20 +230,22 @@ public class CGIHandler {
 
         HttpResponse res = new HttpResponse(200, "OK");
 
+        // Parse CGI headers
         for (String line : headerPart.split("[\r\n]+")) {
             if (line.isEmpty()) {
                 continue;
             }
             int idx = line.indexOf(':');
             if (idx != -1) {
-                res.setHeaders(
-                        line.substring(0, idx).trim(),
-                        line.substring(idx + 1).trim()
-                );
+                String key = line.substring(0, idx).trim();
+                String value = line.substring(idx + 1).trim();
+                res.setHeaders(key, value);
+                System.out.println("[CGI] Header: " + key + ": " + value);
             }
         }
 
-        res.setBody(body.getBytes());
+        res.setBody(body.getBytes(StandardCharsets.UTF_8));
+        System.out.println("[CGI] Body size: " + body.length() + " bytes");
         return res;
     }
 
@@ -224,11 +255,18 @@ public class CGIHandler {
             try {
                 java.lang.reflect.Field field = attachment.getClass().getDeclaredField("writeBuf");
                 field.setAccessible(true);
-                field.set(attachment, response.toByteBuffer());
+                
+                java.nio.ByteBuffer buf = response.toByteBuffer();
+                field.set(attachment, buf);
+                
+                System.out.println("[CGI] WriteBuf set: " + buf.remaining() + " bytes");
 
                 key.interestOps(SelectionKey.OP_WRITE);
+                System.out.println("[CGI] OP_WRITE enabled");
+                
             } catch (Exception e) {
-                System.err.println("Failed to send response: " + e.getMessage());
+                System.err.println("[CGI] Failed to send response: " + e.getMessage());
+                e.printStackTrace();
             }
         }
     }
@@ -236,12 +274,16 @@ public class CGIHandler {
     private void sendSimpleResponse(SelectionKey key, String output) {
         HttpResponse res = new HttpResponse(200, "OK");
         res.setHeaders("Content-Type", "text/plain; charset=UTF-8");
-        res.setBody(output.getBytes());
+        res.setBody(output.getBytes(StandardCharsets.UTF_8));
+        
+        markStreamingFinished(key);
         sendResponse(key, res);
     }
 
     private void sendErrorResponse(SelectionKey key, int code, String message, String detail, String errorPage) {
         HttpResponse response = HttpResponse.ErrorResponse(code, message, detail, errorPage);
+        
+        markStreamingFinished(key);
         sendResponse(key, response);
     }
 
@@ -254,6 +296,7 @@ public class CGIHandler {
         if (ctx != null) {
             Process p = ctx.getProcess();
             if (p.isAlive()) {
+                System.out.println("[CGI] Destroying process");
                 p.destroyForcibly();
             }
         }

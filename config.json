@@ -46,10 +46,12 @@
                     "path": "/upload",
                     "root": "resources/uploads",
                     "methods": [
-                        "POST"
+                        "POST",
+                        "DELETE",
+                        "GET"
                     ],
                     "upload_dir": "resources/uploads",
-                    "directory_listing": false
+                    "directory_listing": true
                 },
                 {
                     "path": "/cgi-bin",

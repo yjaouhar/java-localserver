@@ -71,7 +71,7 @@ public class UploadHandler {
                 boolean isFile = cd != null && cd.contains("filename=");
 
                 if (isFile) {
-                    String filename = extractFilename(cd).replaceAll(" ", "") + "_" + System.currentTimeMillis();
+                    String filename =  System.currentTimeMillis()+"_"+extractFilename(cd).replaceAll(" ", "") ;
                     Path outFile = uploadDir.resolve(filename).normalize();
 
                     if (!outFile.startsWith(uploadDir)) {

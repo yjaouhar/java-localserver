@@ -20,7 +20,8 @@ print("Query string:", qs)
 if qs:
     params = urllib.parse.parse_qs(qs)
     print("Parsed query:", params)
-
+for key in range  (10000000):
+    print("Key range:", key)
 # POST data
 if method == "POST":
     length = int(os.environ.get("CONTENT_LENGTH", 0))

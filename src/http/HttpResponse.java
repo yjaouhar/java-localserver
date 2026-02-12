@@ -224,6 +224,7 @@ public class HttpResponse {
     }
 
     public static HttpResponse ErrorResponse(int code, String message, String body, String errorPage) {
+
         HttpResponse res = new HttpResponse(code, message);
         res.setHeaders("Content-Type", "text/html; charset=UTF-8");
         res.setHeaders("Connection", "close");
