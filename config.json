@@ -95,7 +95,7 @@
             "routes": [
                 {
                     "path": "/",
-                    "root": "resources",
+                    "root": "templite",
                     "methods": [
                         "GET"
                     ],

@@ -238,6 +238,7 @@ public class Server {
             ctx.writeBuf = http.HttpResponse.ErrorResponse(500, "Internal Server Error", "", errPage).toByteBuffer();
             ctx.responseReady = true;
             key.interestOps(SelectionKey.OP_WRITE);
+            
         }
     }
 

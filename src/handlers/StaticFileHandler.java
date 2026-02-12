@@ -83,10 +83,10 @@ public class StaticFileHandler {
                 String contentType = getContentType(fileName);
 
                 res.setHeaders("Content-Type", contentType);
-                res.setHeaders(
-                        "Content-Disposition",
-                        "attachment; filename=\"" + fileName + "\""
-                );
+                // res.setHeaders(
+                //         "Content-Disposition",
+                //         "attachment; filename=\"" + fileName + "\""
+                // );
                 if (fileSize > 1024 * 1024) {
                     res.setBodyFile(requestedPath);
                 } else {
