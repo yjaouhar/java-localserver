@@ -49,7 +49,7 @@ public class Server {
 
         long uploadBytesThisSecond = 0;
         long lastSecondTimestamp = 0;
-        static final long MAX_UPLOAD_PER_SECOND = 5 * 1024 * 1024;
+        static final long MAX_UPLOAD_PER_SECOND = 15 * 1024 * 1024;
 
         boolean shouldLimitUpload(int bytesAboutToRead) {
             long now = System.currentTimeMillis() / 1000;
@@ -362,20 +362,17 @@ public class Server {
             long idle = now - ctx.lastActivityAt;
 
             if (!ctx.request.isRequestCompleted() && elapsed > headerTimeout) {
-                // System.out.println("⏱ Header timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
             if (ctx.request.isRequestCompleted() && !ctx.responseReady
                     && elapsed > bodyTimeout) {
-                // System.out.println("⏱ Body processing timeout (" + elapsed + "ms)");
                 handleHttpError(key, ctx, "408 Request Timeout");
                 continue;
             }
 
             if (idle > idleTimeout) {
-                // System.out.println("⏱ Idle timeout (" + idle + "ms)");
                 safeCleanup(key);
             }
         }
