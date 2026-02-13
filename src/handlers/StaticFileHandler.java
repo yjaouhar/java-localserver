@@ -75,7 +75,8 @@ public class StaticFileHandler {
             }
 
             if (Files.exists(requestedPath) && !Files.isDirectory(requestedPath)) {
-                if (request.getPath().endsWith("/")) {
+
+                if (request.getPath().endsWith("/") && !request.getPath().equals("/")) {
                     return HttpResponse.ErrorResponse(404, "Not Found", "Index file not found", errorPages.get(404));
                 }
                 long fileSize = Files.size(requestedPath);
